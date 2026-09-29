@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#1a73e8">
+<link rel="icon" href="data:,">
+<title>TM to micro:bit</title>
+<style>
+  :root { --bg:#f4f6f8; --card:#fff; --fg:#1b1f24; --muted:#5f6b7a; --line:#dde3ea; --accent:#1a73e8; --on-accent:#fff; --ok:#188038; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#101317; --card:#1a1f26; --fg:#e8eaed; --muted:#9aa4b2; --line:#2e3640; --accent:#8ab4f8; --on-accent:#0b1b33; --ok:#81c995; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 16px/1.45 system-ui, sans-serif; background: var(--bg); color: var(--fg); }
+  main { max-width: 560px; margin: 0 auto; padding: 12px 16px 48px; display: grid; gap: 12px; }
+  h1 { font-size: 1.3rem; margin: 8px 0 0; }
+  h2 { font-size: 1rem; margin: 0; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: grid; gap: 10px; }
+  [hidden] { display: none !important; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .row > * { flex: 1 1 auto; }
+  input[type=url] { min-width: 0; flex: 1 1 220px; font: inherit; padding: 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  button { font: inherit; font-weight: 600; min-height: 48px; padding: 0 18px; border: 0; border-radius: 10px; background: var(--accent); color: var(--on-accent); cursor: pointer; }
+  button.ghost { background: transparent; color: var(--accent); border: 1px solid var(--line); }
+  button:disabled { opacity: .45; cursor: default; }
+  label { display: flex; gap: 8px; align-items: center; }
+  label.stack { display: grid; gap: 4px; }
+  canvas { width: 100%; max-width: 360px; aspect-ratio: 1; border-radius: 10px; background: #000; justify-self: center; }
+  .bar { position: relative; height: 36px; border-radius: 8px; overflow: hidden; background: var(--bg); border: 1px solid var(--line); }
+  .bar i { position: absolute; inset: 0 auto 0 0; background: var(--accent); opacity: .25; transition: width .1s; }
+  .bar.top i { opacity: .6; }
+  .bar span { position: relative; display: flex; justify-content: space-between; padding: 0 12px; line-height: 34px; font-variant-numeric: tabular-nums; }
+  .muted, small { color: var(--muted); }
+  #linkName { color: var(--ok); font-weight: 600; }
+  #log { margin: 0; max-height: 140px; overflow: auto; font: 12px/1.4 ui-monospace, monospace; white-space: pre-wrap; color: var(--muted); }
+  ol { margin: 0; padding-left: 20px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Teachable Machine → micro:bit</h1>
+
+  <section>
+    <label class="stack" for="url">Teachable Machine model link</label>
+    <div class="row">
+      <input id="url" type="url" inputmode="url" autocomplete="off" placeholder="https://teachablemachine.withgoogle.com/models/…/">
+      <button id="load">Load</button>
+    </div>
+    <small id="status">Image, pose and audio models are supported.</small>
+  </section>
+
+  <section id="cam" hidden>
+    <canvas id="canvas" width="320" height="320"></canvas>
+    <div class="row">
+      <button id="switch" class="ghost">Switch camera</button>
+      <label><input type="checkbox" id="mirror" checked> Mirror (like TM training)</label>
+    </div>
+  </section>
+
+  <section id="preds" hidden>
+    <div id="bars" style="display:grid;gap:6px"></div>
+  </section>
+
+  <section>
+    <h2>micro:bit</h2>
+    <div class="row" id="connectRow">
+      <button id="ble">Bluetooth</button>
+      <button id="usb">USB</button>
+    </div>
+    <div class="row" id="connectedRow" hidden>
+      <span id="linkName"></span>
+      <button id="disconnect" class="ghost">Disconnect</button>
+    </div>
+    <label class="stack">Send class when confidence ≥ <output id="thv">80%</output>
+      <input type="range" id="th" min="0.5" max="1" step="0.05" value="0.8">
+    </label>
+    <small>Last sent: <b id="sent">–</b></small>
+    <pre id="log"></pre>
+  </section>
+
+  <section>
+    <h2>How to use</h2>
+    <ol class="muted">
+      <li>In <a href="https://makecode.microbit.org/">MakeCode</a>: <b>Extensions</b> → paste <code id="extUrl">this repo's GitHub URL</code>, use the <b>Teachable Machine</b> blocks, download to the micro:bit. Or just flash the <a href="microbit-test.hex" download>test program</a> (shows icons for “Class 1/2/3”).</li>
+      <li>In Teachable Machine: <b>Export model → Upload</b>, copy the shareable link, paste it above, press <b>Load</b>.</li>
+      <li>Press <b>Bluetooth</b>, or plug the micro:bit in (on a phone, with an OTG / USB-C cable) and press <b>USB</b>.</li>
+    </ol>
+  </section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.3.1/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8.5/dist/teachablemachine-image.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@teachablemachine/pose@0.8.6/dist/teachablemachine-pose.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/speech-commands@0.4.0/dist/speech-commands.min.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const UART = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+const SIZE = 320;
+const ctx = $('canvas').getContext('2d');
+const video = Object.assign(document.createElement('video'), { playsInline: true, muted: true, autoplay: true });
+let kind, model, recognizer, stream, labels = [], bars = [], runId = 0, facing = 'user';
+let link = null, lastSent = null, pending = null, busy = false;
+
+const log = msg => $('log').textContent = `${new Date().toLocaleTimeString()}  ${msg}\n${$('log').textContent}`.slice(0, 4000);
+const status = msg => $('status').textContent = msg;
+const threshold = () => +$('th').value;
+
+// ---------- Teachable Machine ----------
+
+async function loadModel() {
+  stop();
+  let url = $('url').value.trim().replace(/(model|metadata)\.json.*$/, '');
+  if (!url.endsWith('/')) url += '/';
+  try { localStorage.setItem('tm-url', url); } catch {}
+  status('Loading model…');
+  $('load').disabled = true;
+  try {
+    const res = await fetch(url + 'metadata.json');
+    if (!res.ok) throw new Error(`no model at ${url} (HTTP ${res.status})`);
+    const meta = await res.json();
+    model?.dispose?.();
+    model = null;
+    if (meta.wordLabels) {
+      kind = 'audio';
+      recognizer = speechCommands.create('BROWSER_FFT', undefined, url + 'model.json', url + 'metadata.json');
+      await recognizer.ensureModelLoaded();
+      labels = recognizer.wordLabels();
+    } else {
+      kind = /pose/.test(meta.packageName) ? 'pose' : 'image';
+      model = await (kind === 'pose' ? tmPose : tmImage).load(url + 'model.json', url + 'metadata.json');
+      labels = meta.labels;
+    }
+    $('bars').replaceChildren(...labels.map(name => {
+      const el = document.createElement('div');
+      el.className = 'bar';
+      el.innerHTML = '<i></i><span><b></b><em></em></span>';
+      el.querySelector('b').textContent = name;
+      return el;
+    }));
+    bars = [...$('bars').children];
+    $('preds').hidden = false;
+    await start();
+    status(`${kind} model · ${labels.length} classes`);
+  } catch (e) {
+    status('Error: ' + e.message);
+    console.error(e);
+  } finally {
+    $('load').disabled = false;
+  }
+}
+
+async function start() {
+  const id = ++runId;
+  navigator.wakeLock?.request('screen').catch(() => {});
+  if (kind === 'audio') {
+    $('cam').hidden = true;
+    await recognizer.listen(r => id === runId && show(Array.from(r.scores)),
+      { probabilityThreshold: 0, invokeCallbackOnNoiseAndUnknown: true, overlapFactor: 0.5 });
+    return;
+  }
+  $('cam').hidden = false;
+  stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: facing, width: { ideal: 640 }, height: { ideal: 480 } } });
+  video.srcObject = stream;
+  await video.play();
+  loop(id);
+}
+
+function stop() {
+  runId++;
+  stream?.getTracks().forEach(t => t.stop());
+  stream = null;
+  if (recognizer?.isListening()) recognizer.stopListening();
+}
+
+async function loop(id) {
+  if (id !== runId) return;
+  try {
+    const s = Math.min(video.videoWidth, video.videoHeight);
+    if (s) {
+      ctx.save();
+      if ($('mirror').checked) { ctx.translate(SIZE, 0); ctx.scale(-1, 1); }
+      ctx.drawImage(video, (video.videoWidth - s) / 2, (video.videoHeight - s) / 2, s, s, 0, 0, SIZE, SIZE);
+      ctx.restore();
+      let preds;
+      if (kind === 'pose') {
+        const { pose, posenetOutput } = await model.estimatePose($('canvas'));
+        preds = await model.predict(posenetOutput);
+        if (pose) { tmPose.drawKeypoints(pose.keypoints, 0.5, ctx); tmPose.drawSkeleton(pose.keypoints, 0.5, ctx); }
+      } else {
+        preds = await model.predict($('canvas'));
+      }
+      if (id === runId) show(preds.map(p => p.probability));
+    }
+  } catch (e) {
+    status('Error: ' + e.message);
+    console.error(e);
+    return;
+  }
+  requestAnimationFrame(() => loop(id));
+}
+
+function show(probs) {
+  let top = 0;
+  probs.forEach((p, i) => {
+    bars[i].querySelector('i').style.width = (p * 100).toFixed(1) + '%';
+    bars[i].querySelector('em').textContent = Math.round(p * 100) + '%';
+    if (p > probs[top]) top = i;
+  });
+  bars.forEach((b, i) => b.classList.toggle('top', i === top));
+  if (link && probs[top] >= threshold() && labels[top] !== lastSent) send(labels[top]);
+}
+
+// ---------- micro:bit link ----------
+
+// Sends "label\n". While a write is in flight only the newest label is kept.
+async function send(label) {
+  lastSent = pending = label;
+  $('sent').textContent = label;
+  if (busy) return;
+  busy = true;
+  while (pending !== null && link) {
+    const text = pending;
+    pending = null;
+    try { await link.write(new TextEncoder().encode(text + '\n')); log('→ ' + text); }
+    catch (e) { log('send failed: ' + e.message); }
+  }
+  busy = false;
+}
+
+// micro:bit Bluetooth UART service. Needs the MakeCode extension on the micro:bit.
+async function connectBle() {
+  const device = await navigator.bluetooth.requestDevice({ filters: [{ namePrefix: 'BBC micro:bit' }], optionalServices: [UART] });
+  let rx;
+  // Android often fails the first GATT connect/discovery; retry a couple of times.
+  for (let attempt = 1; !rx; attempt++) {
+    try {
+      const server = await device.gatt.connect();
+      const chars = await (await server.getPrimaryService(UART)).getCharacteristics();
+      rx = chars.find(c => c.properties.write || c.properties.writeWithoutResponse);
+      if (!rx) throw new Error('UART RX characteristic missing');
+    } catch (e) {
+      if (attempt === 3) {
+        device.gatt.disconnect();
+        throw /service/i.test(e.message) ? new Error('Bluetooth UART not found – flash the micro:bit with the Teachable Machine extension') : e;
+      }
+      await new Promise(r => setTimeout(r, 600));
+    }
+  }
+  device.addEventListener('gattserverdisconnected', () => dropped('Bluetooth'));
+  return {
+    name: 'Bluetooth · ' + device.name,
+    write: async bytes => { for (let i = 0; i < bytes.length; i += 20) await rx.writeValue(bytes.slice(i, i + 20)); },
+    close: () => device.gatt.disconnect(),
+  };
+}
+
+// micro:bit USB serial through the DAPLink interface chip (same commands MakeCode and DAPjs use).
+async function connectUsb() {
+  const dev = await navigator.usb.requestDevice({ filters: [{ vendorId: 0x0d28, productId: 0x0204 }] });
+  await dev.open();
+  if (!dev.configuration) await dev.selectConfiguration(1);
+  const ifaces = dev.configuration.interfaces.filter(i => i.alternates[0].interfaceClass === 0xff);
+  const iface = ifaces.find(i => i.alternates[0].endpoints.length) || ifaces[0];
+  if (!iface) throw new Error('no CMSIS-DAP interface – update the micro:bit firmware');
+  await dev.claimInterface(iface.interfaceNumber);
+  const eps = iface.alternates[0].endpoints;
+  const epIn = eps.find(e => e.direction === 'in'), epOut = eps.find(e => e.direction === 'out');
+  const hid = { requestType: 'class', recipient: 'interface', index: iface.interfaceNumber };
+  // One vendor command = one 64-byte packet out, one reply in. V2 has bulk endpoints, V1 uses HID reports.
+  const cmd = async bytes => {
+    const pkt = new Uint8Array(64);
+    pkt.set(bytes);
+    if (epOut && epIn) {
+      await dev.transferOut(epOut.endpointNumber, pkt);
+      await dev.transferIn(epIn.endpointNumber, 64);
+    } else {
+      await dev.controlTransferOut({ ...hid, request: 0x09, value: 0x200 }, pkt);
+      await dev.controlTransferIn({ ...hid, request: 0x01, value: 0x100 }, 64);
+    }
+  };
+  await cmd([0x82, ...new Uint8Array(new Uint32Array([115200]).buffer)]); // UART baud rate
+  return {
+    name: 'USB · micro:bit',
+    dev,
+    write: async bytes => {
+      for (let i = 0; i < bytes.length; i += 62) {
+        const chunk = bytes.slice(i, i + 62);
+        await cmd([0x84, chunk.length, ...chunk]); // UART write
+      }
+    },
+    close: () => dev.close(),
+  };
+}
+
+async function connect(fn) {
+  try {
+    link = await fn();
+    lastSent = null; // resend the current class on the next frame
+    log('connected: ' + link.name);
+    $('linkName').textContent = link.name;
+    $('connectRow').hidden = true;
+    $('connectedRow').hidden = false;
+  } catch (e) {
+    if (e.name !== 'NotFoundError' || /flash|firmware/.test(e.message)) log('connect failed: ' + e.message);
+    console.error(e);
+  }
+}
+
+function dropped(why) {
+  if (!link) return;
+  link = null;
+  log('disconnected: ' + why);
+  $('connectRow').hidden = false;
+  $('connectedRow').hidden = true;
+}
+
+// ---------- UI ----------
+
+$('load').onclick = loadModel;
+$('url').onkeydown = e => e.key === 'Enter' && loadModel();
+$('th').oninput = () => $('thv').textContent = Math.round(threshold() * 100) + '%';
+$('switch').onclick = () => { facing = facing === 'user' ? 'environment' : 'user'; stop(); start().catch(e => status('Error: ' + e.message)); };
+$('ble').onclick = () => connect(connectBle);
+$('usb').onclick = () => connect(connectUsb);
+$('disconnect').onclick = async () => { const l = link; dropped('by user'); try { await l.close(); } catch {} };
+
+if (!navigator.bluetooth) { $('ble').disabled = true; $('ble').title = 'Web Bluetooth not available in this browser'; }
+if (!navigator.usb) { $('usb').disabled = true; $('usb').title = 'WebUSB not available in this browser'; }
+if (!window.isSecureContext) status('Open this page over https:// – camera, Bluetooth and USB need it.');
+navigator.usb?.addEventListener('disconnect', e => link?.dev === e.device && dropped('USB unplugged'));
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden || !stream) return;
+  navigator.wakeLock?.request('screen').catch(() => {});
+  video.play().catch(() => {});
+});
+
+const repo = location.hostname.endsWith('github.io') && `https://github.com/${location.hostname.split('.')[0]}/${location.pathname.split('/')[1]}`;
+if (repo) $('extUrl').textContent = repo;
+try { $('url').value = new URLSearchParams(location.search).get('model') || localStorage.getItem('tm-url') || ''; } catch {}
+</script>
+</body>
+</html>
