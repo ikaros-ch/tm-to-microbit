@@ -15,6 +15,7 @@ input.onButtonPressed(Button.A, function () {
 * `on class ID … detected`: the same, using the class ID. IDs are the numbers next to each class in the web app (1, 2, 3… by default, and you can change them).
 * `detected class`, `class ID`, `confidence` (0–100): the last class received. The confidence keeps updating while the class is shown, also when it drops below the web app's slider.
 * `detected class [name|ID] and confidence`: text such as `Class 1 87%` (empty before the first class), handy with `show string`.
+* `confidence of class ID (2)` / `confidence of class "Class 2"`: how sure the model is about *that* class right now (0–100), whether or not it is the detected one.
 
 Blocks are available in English and Greek; MakeCode uses the language chosen in its settings.
 

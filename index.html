@@ -134,8 +134,9 @@ const SIZE = 320;
 const ctx = $('canvas').getContext('2d');
 const video = Object.assign(document.createElement('video'), { playsInline: true, muted: true, autoplay: true });
 let kind, model, recognizer, stream, modelUrl = '', labels = [], ids = [], bars = [], looping = false;
-let link = null, lastSent = null, pending = null, busy = false, connecting = false, cand = -1, candSince = 0;
+let link = null, lastSent = null, busy = false, connecting = false, cand = -1, candSince = 0;
 let holdMs = 300; // a camera class must stay on top this long (ms) before it is sent (stops flicker)
+let out = { table: [], main: null, all: null }, tableSent = false, lastAll = null; // see flush()
 const CONF_STEP = 5, CONF_EVERY_MS = 250; // resend the same class when its confidence moved this much, at most this often
 
 // ---------- Greek translation ----------
@@ -267,6 +268,7 @@ async function loadModel() {
     const saved = load('tm-ids:' + url);
     ids = labels.map((_, i) => Number.isInteger(saved?.[i]) ? saved[i] : i + 1);
     lastSent = null;
+    resetOut(); // new class table
     cand = -1;
     $('bars').replaceChildren(...labels.map((name, i) => {
       const row = document.createElement('div');
@@ -280,6 +282,7 @@ async function loadModel() {
         save('tm-ids:' + modelUrl, ids);
         markDuplicateIds();
         lastSent = null; // send the new ID
+        tableSent = false;
       };
       row.querySelector('b').textContent = row.querySelector('.bar').title = name;
       return row;
@@ -401,8 +404,20 @@ function show(probs) {
   // Audio results arrive only every ~0.5 s and are already smoothed, so they are sent at once.
   const ready = cand >= 0 && (kind === 'audio' || now - candSince >= holdMs);
   // Otherwise keep the class the micro:bit has, but keep its confidence current.
+  if (!link) return;
+  // Class table ("@index,id,name") once, then every class's confidence ("#c0,c1,…") when one moves by 5+.
+  if (!tableSent) {
+    tableSent = true;
+    out.table = labels.map((name, i) => ({ text: `@${i},${ids[i]},${name}`, table: true }));
+    flush();
+  }
+  const all = probs.map(p => Math.round(p * 100));
+  if (!lastAll || (all.some((c, i) => Math.abs(c - lastAll.confs[i]) >= CONF_STEP) && now - lastAll.at >= CONF_EVERY_MS)) {
+    out.all = { text: '#' + all.join(','), done: () => (lastAll = { confs: all, at: performance.now() }) };
+    flush();
+  }
   const idx = ready ? top : lastSent?.idx;
-  if (!link || idx === undefined) return;
+  if (idx === undefined) return;
   const msg = { idx, id: ids[idx], conf: Math.round(probs[idx] * 100) };
   const same = lastSent && lastSent.idx === idx && lastSent.id === msg.id;
   if (!same || (Math.abs(msg.conf - lastSent.conf) >= CONF_STEP && now - lastSent.at >= CONF_EVERY_MS)) send(msg);
@@ -410,23 +425,39 @@ function show(probs) {
 
 // ---------- micro:bit link ----------
 
-// Sends "id,confidence,name\n" (name last, so it may contain commas). While a write is in flight only
-// the newest message is kept. A write that fails or hangs is given up after 3 s; show() then retries it.
-async function send(msg) {
-  pending = msg;
+// Lines to the micro:bit, written one at a time: the class table first, then the detected class, then all
+// confidences. Only the newest detected-class / confidences line is kept while a write is in flight.
+const resetOut = () => { out = { table: [], main: null, all: null }; tableSent = false; lastAll = null; };
+
+// Detected class: "id,confidence,name\n" (name last, so it may contain commas).
+function send(msg) {
+  const name = labels[msg.idx];
+  out.main = { text: `${msg.id},${msg.conf},${name}`, done: () => {
+    if (!(lastSent && lastSent.idx === msg.idx && lastSent.id === msg.id)) log(`→ ${name} (ID ${msg.id})`);
+    lastSent = { ...msg, at: performance.now() };
+    $('sent').textContent = `${name} · ID ${msg.id} · ${msg.conf}%`;
+  } };
+  flush();
+}
+
+// A write that fails or hangs is given up after 3 s; show() then queues it again.
+async function flush() {
   if (busy) return;
   busy = true;
-  while (pending !== null && link) {
-    const m = pending, name = labels[m.idx];
-    pending = null;
+  while (link) {
+    const item = out.table.shift() || out.main || out.all;
+    if (!item) break;
+    if (item === out.main) out.main = null;
+    if (item === out.all) out.all = null;
     try {
-      await Promise.race([link.write(new TextEncoder().encode(`${m.id},${m.conf},${name}\n`)),
+      await Promise.race([link.write(new TextEncoder().encode(item.text + '\n')),
         new Promise((_, no) => setTimeout(() => no(new Error(t('no answer from the micro:bit'))), 3000))]);
-      if (!(lastSent && lastSent.idx === m.idx && lastSent.id === m.id)) log(`→ ${name} (ID ${m.id})`);
-      lastSent = { ...m, at: performance.now() };
-      $('sent').textContent = `${name} · ID ${m.id} · ${m.conf}%`;
+      item.done?.();
+      // ponytail: gap between table lines so a burst can't overflow the micro:bit's ~60-byte Bluetooth buffer
+      if (item.table) await new Promise(r => setTimeout(r, 50));
     } catch (e) {
       log(t('send failed: ') + e.message);
+      if (item.table) { out.table = []; tableSent = false; } // resend the whole table
       await new Promise(r => setTimeout(r, 1000)); // don't retry every frame
     }
   }
@@ -510,6 +541,7 @@ async function connect(fn) {
   try {
     link = await fn();
     lastSent = null; // resend the current class on the next frame
+    resetOut();
     log(t('connected: ') + link.name);
     $('linkName').textContent = link.name;
     $('connectRow').hidden = true;

@@ -1,7 +1,7 @@
 /**
  * Receive Teachable Machine classes from the tm-to-microbit web app over USB.
- * The web app sends "id,confidence,name" and a newline when the class changes
- * and when its confidence changes by 5 or more.
+ * The web app sends lines ending in a newline: "id,confidence,name" when the class (or its confidence)
+ * changes, "@index,id,name" once per class, and "#c0,c1,..." with the confidence of every class.
  */
 //% color=#1a73e8 icon="" block="Teachable Machine"
 namespace teachable {
@@ -13,6 +13,10 @@ namespace teachable {
     let current = ""
     let currentId = -1
     let conf = 0
+    // Every class of the model, from "@index,id,name" lines, and their confidences from "#c0,c1,..." lines.
+    let tableIds: number[]
+    let tableNames: string[]
+    let confs: number[]
 
     export enum ClassInfo {
         //% block="name"
@@ -26,6 +30,15 @@ namespace teachable {
      */
     //% blockHidden=1
     export function receive(line: string) {
+        if (line.charAt(0) == "@") {
+            receiveTableRow(line.substr(1))
+            return
+        }
+        if (line.charAt(0) == "#") {
+            confs = []
+            for (const c of line.substr(1).split(",")) confs.push(parseInt(c) || 0)
+            return
+        }
         let id = -1
         let name = line
         const a = line.indexOf(",")
@@ -102,6 +115,43 @@ namespace teachable {
     export function classAndConfidence(what: ClassInfo): string {
         if (current == "" && currentId < 0) return ""
         return (what == ClassInfo.Id ? "" + currentId : current) + " " + conf + "%"
+    }
+
+    // "index,id,name": one class of the model. Index 0 starts a new table.
+    function receiveTableRow(row: string) {
+        const a = row.indexOf(",")
+        const b = a < 0 ? -1 : row.indexOf(",", a + 1)
+        if (b < 0) return
+        const i = parseInt(row.substr(0, a))
+        if (isNaN(i) || i < 0) return
+        if (i == 0 || !tableIds) { tableIds = []; tableNames = [] }
+        while (tableIds.length <= i) { tableIds.push(-1); tableNames.push("") }
+        tableIds[i] = parseInt(row.substr(a + 1, b - a - 1))
+        tableNames[i] = row.substr(b + 1)
+    }
+
+    function confidenceAt(i: number): number {
+        return i >= 0 && confs && i < confs.length ? confs[i] : 0
+    }
+
+    /**
+     * How sure the model is about the class with this ID right now, 0 to 100 (0 if unknown).
+     * @param id class ID, eg: 2
+     */
+    //% blockId=teachable_confidence_of_id block="confidence of class ID $id" weight=45
+    //% id.min=0 id.max=9999 id.defl=2
+    export function confidenceOfId(id: number): number {
+        return tableIds ? confidenceAt(tableIds.indexOf(id)) : 0
+    }
+
+    /**
+     * How sure the model is about this class right now, 0 to 100 (0 if unknown).
+     * @param label class name exactly as written in Teachable Machine, eg: "Class 2"
+     */
+    //% blockId=teachable_confidence_of_class block="confidence of class $label" weight=44
+    //% label.defl="Class 2"
+    export function confidenceOfClass(label: string): number {
+        return tableNames ? confidenceAt(tableNames.indexOf(label)) : 0
     }
 
     // The default 20-byte receive buffer would drop longer lines. The Bluetooth UART buffer is fixed at ~60 bytes.

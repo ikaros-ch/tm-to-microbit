@@ -3,6 +3,8 @@
   "teachable.ClassInfo.Name|block": "όνομα",
   "teachable.classAndConfidence|block": "ανιχνευμένη κλάση $what και βεβαιότητα",
   "teachable.classId|block": "ID κλάσης",
+  "teachable.confidenceOfClass|block": "βεβαιότητα κλάσης $label",
+  "teachable.confidenceOfId|block": "βεβαιότητα κλάσης με ID $id",
   "teachable.confidence|block": "βεβαιότητα",
   "teachable.currentClass|block": "ανιχνευμένη κλάση",
   "teachable.onClassId|block": "όταν ανιχνευτεί η κλάση με ID $id",

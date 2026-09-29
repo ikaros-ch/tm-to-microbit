@@ -118,7 +118,7 @@ async function load(page) {
 }
 const lines = bytes => new TextDecoder().decode(new Uint8Array(bytes)).split('\n').filter(Boolean);
 // Protocol: "id,confidence,name" – the name is last and may contain commas.
-const msgs = bytes => lines(bytes).map(l => { const [id, conf, ...n] = l.split(','); return { id: +id, conf: +conf, name: n.join(',') }; });
+const msgs = bytes => lines(bytes).filter(l => !/^[@#]/.test(l)).map(l => { const [id, conf, ...n] = l.split(','); return { id: +id, conf: +conf, name: n.join(',') }; });
 
 // 1. camera preview without a model, and switching between cameras
 {
@@ -386,6 +386,28 @@ for (const [name, url] of Object.entries(MODELS)) {
   const r = await page.evaluate(() => [$('status').textContent, $('bars').querySelector('input').getAttribute('aria-label')]);
   check(/^μοντέλο εικόνας/.test(r[0]) && /^ID για/.test(r[1]), 'language switch re-renders status and ID labels', r.join(' / '));
   await page.click('#lang');
+  await page.close();
+}
+
+// 17. class table ("@index,id,name") and every class's confidence ("#c0,c1,…") for "confidence of class ID"
+{
+  const page = await open(MODELS.audio);
+  await load(page);
+  await page.evaluate(() => recognizer.stopListening());
+  await page.$$eval('input.cid', els => { els[1].value = 22; els[1].dispatchEvent(new Event('change')); });
+  await page.click('#usb');
+  await page.waitForTimeout(300);
+  const step = (p, wait) => page.evaluate(([p, w]) => new Promise(r => { show([p, 1 - p, 0, 0]); setTimeout(r, w); }), [p, wait]);
+  await step(0.9, 400); await step(0.88, 300); await step(0.7, 300);
+  const all = lines(await page.evaluate(() => __usb.bytes));
+  const labels = await page.$$eval('#bars b', bs => bs.map(b => b.textContent));
+  const table = all.filter(l => l[0] === '@'), confs = all.filter(l => l[0] === '#');
+  check(JSON.stringify(table) === JSON.stringify(labels.map((n, i) => `@${i},${i === 1 ? 22 : i + 1},${n}`)) && all.indexOf(table.at(-1)) < all.indexOf(confs[0]),
+    'class table sent first, with edited IDs', JSON.stringify(table));
+  check(JSON.stringify(confs) === '["#90,10,0,0","#70,30,0,0"]', 'all confidences sent when one moves by 5+', JSON.stringify(confs));
+  await page.$$eval('input.cid', els => { els[1].value = 5; els[1].dispatchEvent(new Event('change')); });
+  await step(0.7, 400);
+  check(lines(await page.evaluate(() => __usb.bytes)).includes('@1,5,' + labels[1]), 'table resent after an ID change');
   await page.close();
 }
 

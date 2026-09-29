@@ -41,6 +41,7 @@ input.onButtonPressed(Button.A, function () {
 * `on class ID … detected`: the same, using the class ID. IDs are the numbers next to each class in the web app (1, 2, 3… by default, and you can change them).
 * `detected class`, `class ID`, `confidence` (0–100): the last class received. The confidence keeps updating while the class is shown, also when it drops below the web app's slider.
 * `detected class [name|ID] and confidence`: text such as `Class 1 87%` (empty before the first class), handy with `show string`.
+* `confidence of class ID (2)` / `confidence of class "Class 2"`: how sure the model is about *that* class right now (0–100), whether or not it is the detected one.
 
 Blocks are available in English and Greek; MakeCode uses the language chosen in its settings.
 
@@ -62,6 +63,8 @@ Blocks are available in English and Greek; MakeCode uses the language chosen in 
 ## Protocol
 
 `id,confidence,name` plus `\n` (for example `1,87,Class 1`). The name comes last so it may contain commas. The web app sends it when the top class changes and its confidence is at or above the slider value (default 80%), and again when the confidence moves by 5 or more (at most every 0.25 s). When no class reaches the slider, the last class sent stays and only its confidence keeps updating (same rule). The whole line must fit the micro:bit's 60-byte Bluetooth receive buffer, which leaves 50 bytes (UTF-8) for the name.
+
+Two more kinds of line feed the `confidence of class …` blocks: `@index,id,name`, sent once per class after connecting, loading a model or changing an ID; and `#c0,c1,…`, the confidence of every class in model order, sent when any of them moves by 5 or more (at most every 0.25 s). Extensions older than v0.5.0 don't understand these lines, so update the extension in MakeCode (remove it and add it again) when you update.
 
 * Bluetooth: Nordic UART service `6e400001-b5a3-f393-e0a9-e50e24dcca9e`, written in 20-byte chunks.
 * USB: DAPLink vendor commands `0x82` (set baud 115200) and `0x84` (UART write), the same ones MakeCode uses. Arrives on the micro:bit's `serial`.
