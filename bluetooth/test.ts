@@ -1,4 +1,3 @@
-// Test program: flash, open the web app, connect.
 // Teachable Machine's default class names are "Class 1", "Class 2", ... – rename to match your model.
 bluetooth.onBluetoothConnected(() => basic.showIcon(IconNames.Yes))
 bluetooth.onBluetoothDisconnected(() => basic.showIcon(IconNames.No))

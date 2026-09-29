@@ -1,15 +1,16 @@
 {
-    "name": "tm-to-microbit",
-    "version": "0.1.0",
-    "description": "Receive Teachable Machine classes from a phone or computer over Bluetooth or USB",
+    "name": "teachable-machine-bluetooth",
+    "version": "0.2.0",
+    "description": "Teachable Machine classes from the tm-to-microbit web app over Bluetooth (no pairing) or USB. Removes radio.",
     "license": "MIT",
     "dependencies": {
         "core": "*",
-        "bluetooth": "*"
+        "bluetooth": "*",
+        "teachable-machine-usb": "github:ikaros-ch/tm-to-microbit/usb#v0.2.0"
     },
     "files": [
         "README.md",
-        "main.ts"
+        "bluetooth.ts"
     ],
     "testFiles": [
         "test.ts"

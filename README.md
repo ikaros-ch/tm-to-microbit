@@ -4,11 +4,20 @@ Run a [Teachable Machine](https://teachablemachine.withgoogle.com/) model (image
 
 **Web app:** https://ikaros-ch.github.io/tm-to-microbit/
 
-This repo is also a MakeCode extension that receives the classes.
+## MakeCode extensions
+
+Add one of these inside a MakeCode project with **Extensions**, pasting the URL into the search box. Don't use *Import*, which opens the extension itself as a project.
+
+| Extension | URL | Radio |
+|---|---|---|
+| [Bluetooth](bluetooth/): no pairing needed, also works over USB | `https://github.com/ikaros-ch/tm-to-microbit/bluetooth` | removed (MakeCode can't use both) |
+| [USB](usb/) | `https://github.com/ikaros-ch/tm-to-microbit/usb` | kept |
+
+Ready-made test programs: [microbit-test-bluetooth.hex](microbit-test-bluetooth.hex) and [microbit-test-usb.hex](microbit-test-usb.hex). They show heart / happy / sad icons for `Class 1/2/3`, and button A scrolls the last class.
 
 ## Use it
 
-1. **micro:bit:** in [MakeCode](https://makecode.microbit.org/) open **Extensions**, paste `https://github.com/ikaros-ch/tm-to-microbit`, build with the blocks below, and download. To try it without MakeCode, flash [microbit-test.hex](microbit-test.hex) instead (heart / happy / sad icons for `Class 1/2/3`, button A scrolls the last class).
+1. **micro:bit:** add an extension (above), build with the blocks below, and download.
 2. **Teachable Machine:** *Export model → Upload (shareable link)*, copy the link.
 3. **Web app:** paste the link, press **Load**, then **Bluetooth**, or plug in the micro:bit and press **USB**.
 
@@ -28,8 +37,6 @@ input.onButtonPressed(Button.A, function () {
 * `on class "…" detected`: runs when the web app detects that class. The name must match Teachable Machine exactly.
 * `detected class`: the last class received.
 
-The extension turns on the Bluetooth UART service and sets **No Pairing Required**, so Android does not need to pair. Adding it removes the `radio` blocks, because MakeCode can't use Bluetooth and radio together.
-
 ## Protocol
 
 The class name plus `\n`, sent when the top class changes and its confidence is at or above the slider value (default 80%).
@@ -48,4 +55,4 @@ The class name plus `\n`, sent when the top class changes and its confidence is 
 ## Develop
 
 `index.html` is the whole web app. Run `python -m http.server` and open `http://localhost:8000` (localhost counts as a secure context).
-Build the extension with `npx pxt target microbit && npx pxt install && npx pxt build`.
+To build an extension, run `npx pxt target microbit && npx pxt install && npx pxt build` in `usb/` or `bluetooth/`. `bluetooth/` depends on `usb/` at a git tag, so bump both `version`s and the tag in `bluetooth/pxt.json` together when you release.

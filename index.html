@@ -36,6 +36,8 @@
   #linkName { color: var(--ok); font-weight: 600; }
   #log { margin: 0; max-height: 140px; overflow: auto; font: 12px/1.4 ui-monospace, monospace; white-space: pre-wrap; color: var(--muted); }
   ol { margin: 0; padding-left: 20px; }
+  li { margin-bottom: 6px; }
+  code { overflow-wrap: anywhere; user-select: all; }
 </style>
 </head>
 <body>
@@ -83,7 +85,11 @@
   <section>
     <h2>How to use</h2>
     <ol class="muted">
-      <li>In <a href="https://makecode.microbit.org/">MakeCode</a>: <b>Extensions</b> → paste <code id="extUrl">this repo's GitHub URL</code>, use the <b>Teachable Machine</b> blocks, download to the micro:bit. Or just flash the <a href="microbit-test.hex" download>test program</a> (shows icons for “Class 1/2/3”).</li>
+      <li>In a <a href="https://makecode.microbit.org/">MakeCode</a> project open <b>Extensions</b> and paste one of these:
+        <br><b>Bluetooth</b> (removes radio, USB still works): <code>https://github.com/ikaros-ch/tm-to-microbit/bluetooth</code>
+        <br><b>USB only</b> (keeps radio): <code>https://github.com/ikaros-ch/tm-to-microbit/usb</code>
+        <br>Use the <b>Teachable Machine</b> blocks and download. Or flash a ready-made test (shows icons for “Class 1/2/3”):
+        <a href="microbit-test-bluetooth.hex" download>Bluetooth</a> · <a href="microbit-test-usb.hex" download>USB</a>.</li>
       <li>In Teachable Machine: <b>Export model → Upload</b>, copy the shareable link, paste it above, press <b>Load</b>.</li>
       <li>Press <b>Bluetooth</b>, or plug the micro:bit in (on a phone, with an OTG / USB-C cable) and press <b>USB</b>.</li>
     </ol>
@@ -336,8 +342,6 @@ document.addEventListener('visibilitychange', () => {
   video.play().catch(() => {});
 });
 
-const repo = location.hostname.endsWith('github.io') && `https://github.com/${location.hostname.split('.')[0]}/${location.pathname.split('/')[1]}`;
-if (repo) $('extUrl').textContent = repo;
 try { $('url').value = new URLSearchParams(location.search).get('model') || localStorage.getItem('tm-url') || ''; } catch {}
 </script>
 </body>
