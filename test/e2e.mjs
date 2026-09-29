@@ -160,8 +160,9 @@ for (const [name, url] of Object.entries(MODELS)) {
     const protoOk = mode === 'ble' ? r.ble.chunks.every(n => n <= 20) : r.usb.baud === 115200 && !r.usb.bad.length;
     check(!/Error/.test(status) && sum >= 95 && sum <= 105 && sent.length > 0 && sent.every(s => labels.includes(s)) && idsOk && protoOk,
       `${name} over ${mode}`, `${status}; sent ${JSON.stringify(sent.slice(0, 4))}${sent.length > 4 ? '…' : ''}; ${mode === 'ble' ? 'chunks ' + r.ble.chunks.slice(0, 4) : 'baud ' + r.usb.baud + ' ' + r.usb.bad.join(',')}`);
+    check(await page.isVisible('#bleWarn') === (mode === 'ble'), `${name} over ${mode}: Bluetooth warning ${mode === 'ble' ? 'shown' : 'hidden'}`);
     await page.click('#disconnect');
-    check(await page.isVisible('#connectRow'), `${name} over ${mode}: disconnect restores buttons`);
+    check(await page.isVisible('#connectRow') && await page.isVisible('#bleWarn'), `${name} over ${mode}: disconnect restores buttons`);
     check(!page.errors.length, `${name} over ${mode}: no console errors`, page.errors.slice(0, 3).join(' | '));
     await page.close();
   }
@@ -272,8 +273,11 @@ for (const [name, url] of Object.entries(MODELS)) {
   await page.reload();
   await load(page);
   check((await page.$$eval('input.cid', els => els.map(e => +e.value))).every((v, i) => v === 40 + i), 'class IDs remembered after reload');
-  await page.$eval('input.cid', el => { el.value = '-5'; el.dispatchEvent(new Event('change')); });
-  check(await page.$eval('input.cid', el => el.value) === '1', 'invalid ID falls back to the default');
+  const setId = (i, v) => page.$$eval('input.cid', (els, [i, v]) => { els[i].value = v; els[i].dispatchEvent(new Event('change')); return els[i].value; }, [i, v]);
+  check(await setId(0, '-5') === '0' && await setId(0, '12345') === '9999' && await setId(0, '') === '1', 'out-of-range ID is clamped, empty ID falls back to the default');
+  check(!(await page.isVisible('#dupHint')), 'no duplicate-ID hint for distinct IDs');
+  await setId(1, '1');
+  check(await page.isVisible('#dupHint'), 'hint when two classes share an ID');
   await page.close();
 }
 
@@ -287,8 +291,12 @@ for (const [name, url] of Object.entries(MODELS)) {
   const step = (p, wait) => page.evaluate(([p, w]) => new Promise(r => { show([p, 1 - p, 0, 0]); setTimeout(r, w); }), [p, wait]);
   await page.evaluate(() => { __ble.bytes.length = 0; lastSent = null; });
   await step(0.9, 300); await step(0.92, 300); await step(0.97, 50); await step(0.8, 300); await step(0.81, 300);
-  const confs = msgs(await page.evaluate(() => __ble.bytes)).map(m => m.conf);
-  check(JSON.stringify(confs) === '[90,97,81]', 'confidence updates are sent on change (80 is rate-limited)', JSON.stringify(confs));
+  // below the 50% slider: the class stays, its confidence keeps updating
+  await page.evaluate(() => new Promise(r => { show([0.3, 0.3, 0.2, 0.2]); setTimeout(r, 300); }));
+  const got = msgs(await page.evaluate(() => __ble.bytes));
+  const confs = got.map(m => m.conf);
+  check(JSON.stringify(confs) === '[90,97,81,30]' && new Set(got.map(m => m.name)).size === 1,
+    'confidence updates are sent on change (80 is rate-limited), also below the slider', JSON.stringify(got));
   await page.close();
 }
 
@@ -315,6 +323,8 @@ for (const [name, url] of Object.entries(MODELS)) {
   const vh = page.viewportSize().height;
   const cam = await page.locator('#canvas').boundingBox(), bar = await page.locator('.bar').first().boundingBox();
   check(cam.y + cam.height <= vh && bar.y + bar.height <= vh && bar.x > cam.x + cam.width - 1, 'landscape: camera and classes side by side', JSON.stringify({ vh, cam, bar }));
+  const [mb, mdl] = [await page.locator('#mb').boundingBox(), await page.locator('#model').boundingBox()];
+  check(mb.y < mdl.y && mb.x > cam.x + cam.width - 1, 'landscape: micro:bit section comes right after the classes', JSON.stringify({ mb, mdl }));
   await page.screenshot({ path: path.join(import.meta.dirname, 'landscape.png') }).catch(() => {});
   await land.close();
 }
@@ -328,6 +338,54 @@ for (const [name, url] of Object.entries(MODELS)) {
   await load(page);
   await page.waitForTimeout(2500);
   check(await page.evaluate(() => __oldRec.model.weights.every(w => w.val.isDisposed)), 'old audio model freed');
+  await page.close();
+}
+
+// 14. a long (Greek) class name: no sideways scrolling, and a visible warning that it's too long for Bluetooth
+{
+  const long = 'Ένα πολύ μεγάλο όνομα κλάσης στα ελληνικά!'; // 42 letters, 79 bytes
+  for (const dev of ['Pixel 7', 'Pixel 7 landscape']) {
+    const c = await browser.newContext({ ...devices[dev], permissions: ['camera', 'microphone'] });
+    await c.addInitScript(mockMicrobit);
+    await c.route('**/metadata.json', async route => {
+      const res = await route.fetch(), meta = await res.json();
+      meta.labels[0] = long;
+      route.fulfill({ response: res, json: meta });
+    });
+    const page = await c.newPage();
+    await page.goto(BASE + '?model=' + encodeURIComponent(MODELS.image));
+    const st = await load(page);
+    const w = [await page.evaluate(() => document.documentElement.scrollWidth), page.viewportSize().width];
+    check(w[0] <= w[1], `${dev}: long class name doesn't widen the page`, w.join(' > '));
+    check(/too long for Bluetooth/.test(st), `${dev}: too-long name warned in the status line`, st);
+    await c.close();
+  }
+}
+
+// 15. a second link entered while a model loads: the latest one wins
+{
+  const page = await open(MODELS.image);
+  // the image model finishes loading after the audio one has started
+  await page.route(MODELS.image + 'model.json', async r => { await new Promise(w => setTimeout(w, 3000)); r.continue(); });
+  await page.press('#url', 'Enter');
+  await page.waitForTimeout(300);
+  await page.fill('#url', MODELS.audio);
+  await page.press('#url', 'Enter');
+  await page.waitForFunction(() => /model ·|Error/.test(document.getElementById('status').textContent), null, { timeout: 60000 });
+  await page.waitForTimeout(3000);
+  const r = await page.evaluate(() => ({ kind, model: !!model, listening: !!recognizer?.isListening(), status: $('status').textContent }));
+  check(r.kind === 'audio' && !r.model && r.listening && /audio model/.test(r.status) && !page.errors.length, 'latest link wins when Enter is pressed during a load', JSON.stringify(r) + page.errors.slice(0, 3).join(' | '));
+  await page.close();
+}
+
+// 16. switching language also translates text that was already shown
+{
+  const page = await open(MODELS.image);
+  await load(page);
+  await page.click('#lang');
+  const r = await page.evaluate(() => [$('status').textContent, $('bars').querySelector('input').getAttribute('aria-label')]);
+  check(/^μοντέλο εικόνας/.test(r[0]) && /^ID για/.test(r[1]), 'language switch re-renders status and ID labels', r.join(' / '));
+  await page.click('#lang');
   await page.close();
 }
 

@@ -1,7 +1,7 @@
 {
   "teachable.ClassInfo.Id|block": "ID",
   "teachable.ClassInfo.Name|block": "όνομα",
-  "teachable.classAndConfidence|block": "κλάση ($what) και βεβαιότητα",
+  "teachable.classAndConfidence|block": "ανιχνευμένη κλάση $what και βεβαιότητα",
   "teachable.classId|block": "ID κλάσης",
   "teachable.confidence|block": "βεβαιότητα",
   "teachable.currentClass|block": "ανιχνευμένη κλάση",

@@ -32,17 +32,21 @@ namespace teachable {
         const b = a < 0 ? -1 : line.indexOf(",", a + 1)
         if (b > 0) {
             id = parseInt(line.substr(0, a))
-            conf = parseInt(line.substr(a + 1, b - a - 1))
+            if (isNaN(id)) id = -1
+            const c = parseInt(line.substr(a + 1, b - a - 1))
+            if (!isNaN(c)) conf = c // a missing confidence keeps the previous one
             name = line.substr(b + 1)
         }
-        if (name == current && id == currentId) return // only the confidence changed
+        // Raise only the event whose value changed (a new confidence alone raises none).
+        const nameChanged = name != current
+        const idChanged = id != currentId
         current = name
         currentId = id
-        if (labels) {
+        if (nameChanged && labels) {
             const i = labels.indexOf(name)
             if (i >= 0) control.raiseEvent(EVENT_ID, i + 1)
         }
-        if (id >= 0) control.raiseEvent(ID_EVENT_ID, id + 1)
+        if (idChanged && id >= 0) control.raiseEvent(ID_EVENT_ID, id + 1)
     }
 
     /**
@@ -92,10 +96,11 @@ namespace teachable {
     }
 
     /**
-     * The detected class (name or ID) and its confidence as text, eg "Class 1 87%".
+     * The detected class (name or ID) and its confidence as text, eg "Class 1 87%" ("" before the first one).
      */
     //% blockId=teachable_class_and_confidence block="detected class $what and confidence" weight=50
     export function classAndConfidence(what: ClassInfo): string {
+        if (current == "" && currentId < 0) return ""
         return (what == ClassInfo.Id ? "" + currentId : current) + " " + conf + "%"
     }
 
