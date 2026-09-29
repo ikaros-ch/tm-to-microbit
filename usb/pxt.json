@@ -1,6 +1,6 @@
 {
     "name": "teachable-machine-usb",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "description": "Teachable Machine classes from the tm-to-microbit web app over USB. Keeps radio.",
     "license": "MIT",
     "dependencies": {
@@ -8,7 +8,9 @@
     },
     "files": [
         "README.md",
-        "teachable.ts"
+        "teachable.ts",
+        "_locales/el/teachable-machine-usb-strings.json",
+        "_locales/el/teachable-machine-usb-jsdoc-strings.json"
     ],
     "testFiles": [
         "test.ts"

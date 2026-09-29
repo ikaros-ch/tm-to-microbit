@@ -1,0 +1,11 @@
+{
+  "teachable": "Λήψη κλάσεων Teachable Machine από την εφαρμογή tm-to-microbit μέσω USB.",
+  "teachable.classAndConfidence": "Η ανιχνευμένη κλάση (όνομα ή ID) και η βεβαιότητά της ως κείμενο, π.χ. \"Class 1 87%\".",
+  "teachable.classId": "Το ID της τελευταίας κλάσης που λήφθηκε (-1 πριν από την πρώτη).",
+  "teachable.confidence": "Πόσο σίγουρο είναι το μοντέλο για την ανιχνευμένη κλάση, από 0 έως 100.",
+  "teachable.currentClass": "Το όνομα της τελευταίας κλάσης που λήφθηκε (\"\" πριν από την πρώτη).",
+  "teachable.onClass": "Εκτελείται όταν η εφαρμογή ανιχνεύσει αυτή την κλάση.",
+  "teachable.onClassId": "Εκτελείται όταν η εφαρμογή ανιχνεύσει την κλάση με αυτό το ID (ορίζεται δίπλα σε κάθε κλάση στην εφαρμογή).",
+  "teachable.onClassId|param|id": "ID κλάσης, π.χ.: 1",
+  "teachable.onClass|param|label": "όνομα κλάσης ακριβώς όπως στο Teachable Machine, π.χ.: \"Class 1\""
+}

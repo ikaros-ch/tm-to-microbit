@@ -7,67 +7,85 @@
 <link rel="icon" href="data:,">
 <title>TM to micro:bit</title>
 <style>
-  :root { --bg:#f4f6f8; --card:#fff; --fg:#1b1f24; --muted:#5f6b7a; --line:#dde3ea; --accent:#1a73e8; --on-accent:#fff; --ok:#188038; }
+  :root { --bg:#f4f6f8; --card:#fff; --fg:#1b1f24; --muted:#5f6b7a; --line:#dde3ea; --accent:#1a73e8; --on-accent:#fff; --ok:#188038; --warn:#b06000; }
   @media (prefers-color-scheme: dark) {
-    :root { --bg:#101317; --card:#1a1f26; --fg:#e8eaed; --muted:#9aa4b2; --line:#2e3640; --accent:#8ab4f8; --on-accent:#0b1b33; --ok:#81c995; }
+    :root { --bg:#101317; --card:#1a1f26; --fg:#e8eaed; --muted:#9aa4b2; --line:#2e3640; --accent:#8ab4f8; --on-accent:#0b1b33; --ok:#81c995; --warn:#fdd663; }
   }
   * { box-sizing: border-box; }
   body { margin: 0; font: 16px/1.45 system-ui, sans-serif; background: var(--bg); color: var(--fg); }
   main { max-width: 560px; margin: 0 auto; padding: 12px 16px 48px; display: grid; gap: 12px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   h1 { font-size: 1.3rem; margin: 8px 0 0; }
   h2 { font-size: 1rem; margin: 0; }
-  section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: grid; gap: 10px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: grid; gap: 10px; min-width: 0; }
   [hidden] { display: none !important; }
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .row > * { flex: 1 1 auto; }
-  input[type=url], select { min-width: 0; flex: 1 1 220px; font: inherit; padding: 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
+  input[type=url], select, input.cid { min-width: 0; flex: 1 1 220px; font: inherit; padding: 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
   input[type=range] { width: 100%; accent-color: var(--accent); }
   button { font: inherit; font-weight: 600; min-height: 48px; padding: 0 18px; border: 0; border-radius: 10px; background: var(--accent); color: var(--on-accent); cursor: pointer; }
   button.ghost { background: transparent; color: var(--accent); border: 1px solid var(--line); }
+  #lang { min-height: 40px; padding: 0 12px; flex: none; }
   button:disabled { opacity: .45; cursor: default; }
   label { display: flex; gap: 8px; align-items: center; }
   label.stack { display: grid; gap: 4px; }
   canvas { width: 100%; max-width: 360px; aspect-ratio: 1; border-radius: 10px; background: #000; justify-self: center; }
-  .bar { position: relative; height: 36px; border-radius: 8px; overflow: hidden; background: var(--bg); border: 1px solid var(--line); }
+  .cls { display: flex; gap: 6px; align-items: center; }
+  input.cid { flex: none; width: 64px; padding: 6px 8px; text-align: center; }
+  .bar { position: relative; flex: 1; min-width: 0; height: 36px; border-radius: 8px; overflow: hidden; background: var(--bg); border: 1px solid var(--line); }
   .bar i { position: absolute; inset: 0 auto 0 0; background: var(--accent); opacity: .25; transition: width .1s; }
   .bar.top i { opacity: .6; }
   .bar span { position: relative; display: flex; justify-content: space-between; gap: 8px; padding: 0 12px; line-height: 34px; font-variant-numeric: tabular-nums; }
   .bar b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .muted, small { color: var(--muted); }
+  .warn { color: var(--warn); }
   #linkName { color: var(--ok); font-weight: 600; }
   #log { margin: 0; max-height: 140px; overflow: auto; font: 12px/1.4 ui-monospace, monospace; white-space: pre-wrap; color: var(--muted); }
   ol { margin: 0; padding-left: 20px; }
   li { margin-bottom: 6px; }
   code { overflow-wrap: anywhere; user-select: all; }
+  /* Landscape phone / wide screen: camera on the left stays in view, classes and controls on the right. */
+  @media (orientation: landscape) and (min-width: 700px) {
+    main { max-width: 1100px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start;
+      grid-template-areas: "head head" "cam preds" "cam model" "cam mb" "help help"; }
+    main:has(#cam[hidden]) { grid-template-areas: "head head" "preds preds" "model model" "mb mb" "help help"; }
+    header { grid-area: head; } #model { grid-area: model; } #preds { grid-area: preds; } #mb { grid-area: mb; } #help { grid-area: help; }
+    #cam { grid-area: cam; position: sticky; top: 8px; }
+    canvas { width: auto; height: min(360px, calc(100vh - 170px)); max-width: 100%; }
+  }
 </style>
 </head>
 <body>
 <main>
-  <h1>Teachable Machine → micro:bit</h1>
+  <header>
+    <h1>Teachable Machine → micro:bit</h1>
+    <button id="lang" class="ghost" aria-label="Language">ΕΛ</button>
+  </header>
 
-  <section>
-    <label class="stack" for="url">Teachable Machine model link</label>
+  <section id="model">
+    <label class="stack" for="url" data-t="modelLink">Teachable Machine model link</label>
     <div class="row">
       <input id="url" type="url" inputmode="url" autocomplete="off" placeholder="https://teachablemachine.withgoogle.com/models/…/">
-      <button id="load">Load</button>
+      <button id="load" data-t="load">Load</button>
     </div>
-    <small id="status">Image, pose and audio models are supported.</small>
+    <small id="status" data-t="supported">Image, pose and audio models are supported.</small>
   </section>
 
   <section id="cam">
     <canvas id="canvas" width="320" height="320" hidden></canvas>
-    <button id="camStart" class="ghost">Start camera</button>
+    <button id="camStart" class="ghost" data-t="startCam">Start camera</button>
     <div class="row">
       <select id="camSel" aria-label="Camera" hidden></select>
-      <label><input type="checkbox" id="mirror" checked> Mirror (like TM training)</label>
+      <label><input type="checkbox" id="mirror" checked> <span data-t="mirror">Mirror (like TM training)</span></label>
     </div>
   </section>
 
   <section id="preds" hidden>
+    <small data-t="idHint">The number next to each class is its ID for the “class ID” blocks. You can change it.</small>
     <div id="bars" style="display:grid;gap:6px"></div>
   </section>
 
-  <section>
+  <section id="mb">
     <h2>micro:bit</h2>
     <div class="row" id="connectRow">
       <button id="ble">Bluetooth</button>
@@ -75,25 +93,27 @@
     </div>
     <div class="row" id="connectedRow" hidden>
       <span id="linkName"></span>
-      <button id="disconnect" class="ghost">Disconnect</button>
+      <button id="disconnect" class="ghost" data-t="disconnect">Disconnect</button>
     </div>
-    <label class="stack">Send class when confidence ≥ <output id="thv">80%</output>
+    <small class="warn" data-t="bleWarn">Bluetooth: in MakeCode ⚙ Project Settings select “No Pairing Required”. Music blocks together with Bluetooth can stop the micro:bit with error 070 – use the USB extension for music.</small>
+    <label class="stack"><span><span data-t="threshold">Send class when confidence ≥</span> <output id="thv">80%</output></span>
       <input type="range" id="th" min="0.5" max="1" step="0.05" value="0.8">
     </label>
-    <small>Last sent: <b id="sent">–</b></small>
+    <small><span data-t="lastSent">Last sent:</span> <b id="sent">–</b></small>
     <pre id="log"></pre>
   </section>
 
-  <section>
-    <h2>How to use</h2>
+  <section id="help">
+    <h2 data-t="howTo">How to use</h2>
     <ol class="muted">
-      <li>In a <a href="https://makecode.microbit.org/">MakeCode</a> project open <b>Extensions</b> and paste one of these:
+      <li data-t="step1">In a <a href="https://makecode.microbit.org/">MakeCode</a> project open <b>Extensions</b> and paste one of these:
         <br><b>Bluetooth</b> (removes radio, USB still works): <code>https://github.com/ikaros-ch/tm-to-microbit/bluetooth</code>
         <br><b>USB only</b> (keeps radio): <code>https://github.com/ikaros-ch/tm-to-microbit/usb</code>
-        <br>Use the <b>Teachable Machine</b> blocks and download. Or flash a ready-made test (shows icons for “Class 1/2/3”):
+        <br>Use the <b>Teachable Machine</b> blocks and download. Or flash a ready-made test (shows icons for “Class 1/2” and ID 3):
         <a href="microbit-test-bluetooth.hex" download>Bluetooth</a> · <a href="microbit-test-usb.hex" download>USB</a>.</li>
-      <li>In Teachable Machine: <b>Export model → Upload</b>, copy the shareable link, paste it above, press <b>Load</b>.</li>
-      <li>Press <b>Bluetooth</b>, or plug the micro:bit in (on a phone, with an OTG / USB-C cable) and press <b>USB</b>.</li>
+      <li data-t="step2">For Bluetooth: in MakeCode open ⚙ → <b>Project Settings</b> and select <b>No Pairing Required</b>. Don’t use music blocks with Bluetooth (error 070); use the USB extension instead.</li>
+      <li data-t="step3">In Teachable Machine: <b>Export model → Upload</b>, copy the shareable link, paste it above, press <b>Load</b>.</li>
+      <li data-t="step4">Press <b>Bluetooth</b>, or plug the micro:bit in (on a phone, with an OTG / USB-C cable) and press <b>USB</b>.</li>
     </ol>
   </section>
 </main>
@@ -108,63 +128,143 @@ const UART = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
 const SIZE = 320;
 const ctx = $('canvas').getContext('2d');
 const video = Object.assign(document.createElement('video'), { playsInline: true, muted: true, autoplay: true });
-let kind, model, recognizer, stream, labels = [], bars = [], looping = false;
-let link = null, lastSent = null, pending = null, busy = false, connecting = false, cand = null, candSince = 0;
+let kind, model, recognizer, stream, modelUrl = '', labels = [], ids = [], bars = [], looping = false;
+let link = null, lastSent = null, pending = null, busy = false, connecting = false, cand = -1, candSince = 0;
 let holdMs = 300; // a camera class must stay on top this long (ms) before it is sent (stops flicker)
+const CONF_STEP = 5, CONF_EVERY_MS = 250; // resend the same class when its confidence moved this much, at most this often
+
+// ---------- Greek translation ----------
+// Static text: elements with data-t (English is read from the page). Dynamic text: t('English {0}', x).
+const EL = {
+  modelLink: 'Σύνδεσμος μοντέλου Teachable Machine',
+  load: 'Φόρτωση',
+  supported: 'Υποστηρίζονται μοντέλα εικόνας, στάσης σώματος και ήχου.',
+  startCam: 'Έναρξη κάμερας',
+  mirror: 'Καθρέφτης (όπως στην εκπαίδευση)',
+  idHint: 'Ο αριθμός δίπλα σε κάθε κλάση είναι το ID της για τα μπλοκ «ID κλάσης». Μπορείτε να τον αλλάξετε.',
+  disconnect: 'Αποσύνδεση',
+  bleWarn: 'Bluetooth: στο MakeCode ⚙ Ρυθμίσεις έργου επιλέξτε «No Pairing Required». Τα μπλοκ μουσικής μαζί με Bluetooth μπορεί να σταματήσουν το micro:bit με σφάλμα 070 – για μουσική χρησιμοποιήστε την επέκταση USB.',
+  threshold: 'Αποστολή κλάσης όταν η βεβαιότητα ≥',
+  lastSent: 'Τελευταία αποστολή:',
+  howTo: 'Οδηγίες',
+  step1: 'Σε ένα έργο <a href="https://makecode.microbit.org/">MakeCode</a> ανοίξτε τις <b>Επεκτάσεις</b> και επικολλήστε ένα από τα παρακάτω:'
+    + '<br><b>Bluetooth</b> (αφαιρεί το radio, το USB λειτουργεί): <code>https://github.com/ikaros-ch/tm-to-microbit/bluetooth</code>'
+    + '<br><b>Μόνο USB</b> (κρατά το radio): <code>https://github.com/ikaros-ch/tm-to-microbit/usb</code>'
+    + '<br>Χρησιμοποιήστε τα μπλοκ <b>Teachable Machine</b> και κάντε λήψη. Ή φορτώστε ένα έτοιμο πρόγραμμα δοκιμής (εικονίδια για «Class 1/2» και ID 3): '
+    + '<a href="microbit-test-bluetooth.hex" download>Bluetooth</a> · <a href="microbit-test-usb.hex" download>USB</a>.',
+  step2: 'Για Bluetooth: στο MakeCode ανοίξτε ⚙ → <b>Ρυθμίσεις έργου</b> και επιλέξτε <b>No Pairing Required</b>. Μη χρησιμοποιείτε μπλοκ μουσικής με Bluetooth (σφάλμα 070)· χρησιμοποιήστε την επέκταση USB.',
+  step3: 'Στο Teachable Machine: <b>Export model → Upload</b>, αντιγράψτε τον σύνδεσμο, επικολλήστε τον παραπάνω και πατήστε <b>Φόρτωση</b>.',
+  step4: 'Πατήστε <b>Bluetooth</b> ή συνδέστε το micro:bit (σε κινητό με καλώδιο OTG / USB-C) και πατήστε <b>USB</b>.',
+  'Paste your Teachable Machine model link first (Export model → Upload → copy link).': 'Επικολλήστε πρώτα τον σύνδεσμο του μοντέλου (Export model → Upload → αντιγραφή συνδέσμου).',
+  'Loading model…': 'Φόρτωση μοντέλου…',
+  'no Teachable Machine model at {0} – use the shareable link from Export model → Upload': 'δεν υπάρχει μοντέλο Teachable Machine στο {0} – χρησιμοποιήστε τον σύνδεσμο από Export model → Upload',
+  "class names over 50 bytes won't reach the micro:bit: {0}": 'ονόματα κλάσεων πάνω από 50 bytes δεν θα φτάσουν στο micro:bit: {0}',
+  '{0} model · {1} classes': 'μοντέλο {0} · {1} κλάσεις',
+  image: 'εικόνας', pose: 'στάσης', audio: 'ήχου',
+  'Error: ': 'Σφάλμα: ',
+  'Camera error: ': 'Σφάλμα κάμερας: ',
+  Camera: 'Κάμερα', Microphone: 'Μικρόφωνο',
+  '{0} blocked – allow it in the site settings (tap the icon left of the address bar), then reload.': '{0}: αποκλείστηκε – επιτρέψτε το στις ρυθμίσεις ιστότοπου (εικονίδιο αριστερά από τη γραμμή διευθύνσεων) και ανανεώστε τη σελίδα.',
+  'Camera {0}': 'Κάμερα {0}',
+  'no answer from the micro:bit': 'καμία απάντηση από το micro:bit',
+  'send failed: ': 'αποτυχία αποστολής: ',
+  'Bluetooth UART not found – flash the micro:bit with the Teachable Machine extension': 'Δεν βρέθηκε Bluetooth UART – φορτώστε στο micro:bit πρόγραμμα με την επέκταση Teachable Machine',
+  'If it keeps failing: in MakeCode Project Settings select “No Pairing Required” and flash again.': 'Αν συνεχίζει να αποτυγχάνει: στις Ρυθμίσεις έργου του MakeCode επιλέξτε «No Pairing Required» και φορτώστε ξανά.',
+  'no CMSIS-DAP interface – update the micro:bit firmware': 'δεν βρέθηκε διεπαφή CMSIS-DAP – ενημερώστε το firmware του micro:bit',
+  'the micro:bit is in use – close MakeCode and other tabs connected to it, then try again': 'το micro:bit χρησιμοποιείται – κλείστε το MakeCode και άλλες καρτέλες που είναι συνδεδεμένες και δοκιμάστε ξανά',
+  'connected: ': 'συνδέθηκε: ',
+  'connect failed: ': 'αποτυχία σύνδεσης: ',
+  'Bluetooth is off – turn on Bluetooth (on Android 11 and older also Location) and try again': 'Το Bluetooth είναι κλειστό – ανοίξτε το Bluetooth (σε Android 11 και παλαιότερα και την Τοποθεσία) και δοκιμάστε ξανά',
+  'disconnected: ': 'αποσυνδέθηκε: ',
+  'by user': 'από τον χρήστη',
+  'USB unplugged': 'αποσυνδέθηκε το USB',
+  'Web Bluetooth not available in this browser': 'Το Web Bluetooth δεν υποστηρίζεται σε αυτόν τον browser',
+  'WebUSB not available in this browser': 'Το WebUSB δεν υποστηρίζεται σε αυτόν τον browser',
+  'Open this page over https:// – camera, Bluetooth and USB need it.': 'Ανοίξτε τη σελίδα μέσω https:// – το χρειάζονται η κάμερα, το Bluetooth και το USB.',
+  'ID for {0}': 'ID για {0}',
+};
+let lang = 'en';
+try { lang = localStorage.getItem('tm-lang') || (/^el\b/i.test(navigator.language) ? 'el' : 'en'); } catch {}
+const t = (s, ...a) => ((lang === 'el' && EL[s]) || s).replace(/\{(\d)\}/g, (_, i) => a[i]);
+function applyLang() {
+  document.documentElement.lang = lang;
+  document.querySelectorAll('[data-t]').forEach(el => {
+    el.dataset.en ??= el.innerHTML;
+    el.innerHTML = (lang === 'el' && EL[el.dataset.t]) || el.dataset.en;
+  });
+  $('lang').textContent = lang === 'el' ? 'EN' : 'ΕΛ';
+}
 
 const log = msg => $('log').textContent = `${new Date().toLocaleTimeString()}  ${msg}\n${$('log').textContent}`.slice(0, 4000);
-const status = msg => $('status').textContent = msg;
+const status = msg => { $('status').removeAttribute('data-t'); $('status').textContent = msg; };
 const threshold = () => +$('th').value;
+const load = key => { try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } };
+const save = (key, v) => { try { localStorage.setItem(key, JSON.stringify(v)); } catch {} };
 
 // ---------- Teachable Machine ----------
 
 async function loadModel() {
   let url = $('url').value.trim().replace(/(model|metadata)\.json.*$/, '');
-  if (!url) return status('Paste your Teachable Machine model link first (Export model → Upload → copy link).');
+  if (!url) return status(t('Paste your Teachable Machine model link first (Export model → Upload → copy link).'));
   if (!/^https?:\/\//.test(url)) url = 'https://' + url;
   if (!url.endsWith('/')) url += '/';
-  if (recognizer?.isListening()) recognizer.stopListening();
   try { localStorage.setItem('tm-url', url); } catch {}
-  status('Loading model…');
+  status(t('Loading model…'));
   $('load').disabled = true;
   try {
-    const notTm = `no Teachable Machine model at ${url} – use the shareable link from Export model → Upload`;
+    const notTm = t('no Teachable Machine model at {0} – use the shareable link from Export model → Upload', url);
     const res = await fetch(url + 'metadata.json').catch(() => { throw new Error(notTm); });
     if (!res.ok) throw new Error(`${notTm} (HTTP ${res.status})`);
     const meta = await res.json().catch(() => { throw new Error(notTm); });
-    const old = model;
-    model = null;
-    // tmImage's dispose() is broken for loaded models and tmPose has none, so free the layers directly.
-    // ponytail: the 2 s delay lets an in-flight predict finish; a busy flag if it is ever too short
-    setTimeout(() => { old?.model.dispose(); old?.posenetModel?.dispose(); }, 2000);
-    let next;
+    // Free the previous model. tmImage's dispose() is broken for loaded models and tmPose has none,
+    // so free the layers directly. ponytail: the 2 s delay lets an in-flight predict finish.
+    const old = model, oldRec = recognizer;
+    model = recognizer = null;
+    if (oldRec?.isListening()) oldRec.stopListening();
+    setTimeout(() => { old?.model.dispose(); old?.posenetModel?.dispose(); oldRec?.model?.dispose(); }, 2000);
+    let next, rec;
     if (meta.wordLabels) {
       kind = 'audio';
-      recognizer = speechCommands.create('BROWSER_FFT', undefined, url + 'model.json', url + 'metadata.json');
-      await recognizer.ensureModelLoaded();
-      labels = recognizer.wordLabels();
+      rec = speechCommands.create('BROWSER_FFT', undefined, url + 'model.json', url + 'metadata.json');
+      await rec.ensureModelLoaded();
+      labels = rec.wordLabels();
     } else {
       kind = /pose/.test(meta.packageName) ? 'pose' : 'image';
       next = await (kind === 'pose' ? tmPose : tmImage).load(url + 'model.json', url + 'metadata.json');
       labels = meta.labels;
     }
-    const tooLong = labels.filter(l => new TextEncoder().encode(l).length > 60);
-    if (tooLong.length) log(`class names over 60 bytes won't reach the micro:bit: ${tooLong.join(', ')}`);
-    $('bars').replaceChildren(...labels.map(name => {
-      const el = document.createElement('div');
-      el.className = 'bar';
-      el.innerHTML = '<i></i><span><b></b><em></em></span>';
-      el.querySelector('b').textContent = el.title = name;
-      return el;
+    modelUrl = url;
+    const saved = load('tm-ids:' + url);
+    ids = labels.map((_, i) => Number.isInteger(saved?.[i]) ? saved[i] : i + 1);
+    lastSent = null;
+    cand = -1;
+    const tooLong = labels.filter(l => new TextEncoder().encode(l).length > 50);
+    if (tooLong.length) log(t("class names over 50 bytes won't reach the micro:bit: {0}", tooLong.join(', ')));
+    $('bars').replaceChildren(...labels.map((name, i) => {
+      const row = document.createElement('div');
+      row.className = 'cls';
+      row.innerHTML = '<input class="cid" type="number" inputmode="numeric" min="0" max="9999"><div class="bar"><i></i><span><b></b><em></em></span></div>';
+      const id = row.querySelector('input');
+      id.value = ids[i];
+      id.setAttribute('aria-label', t('ID for {0}', name));
+      id.onchange = () => {
+        const v = Math.round(+id.value);
+        ids[i] = id.value !== '' && v >= 0 && v <= 9999 ? v : i + 1;
+        id.value = ids[i];
+        save('tm-ids:' + modelUrl, ids);
+        lastSent = null; // send the new ID
+      };
+      row.querySelector('b').textContent = row.querySelector('.bar').title = name;
+      return row;
     }));
-    bars = [...$('bars').children];
+    bars = [...$('bars').querySelectorAll('.bar')];
     $('preds').hidden = false;
     navigator.wakeLock?.request('screen').catch(() => {});
     if (kind === 'audio') {
       stopCamera();
       $('cam').hidden = true;
-      const r = recognizer;
-      await r.listen(res => r === recognizer && show(Array.from(res.scores)),
+      recognizer = rec;
+      await rec.listen(res => rec === recognizer && show(Array.from(res.scores)),
         { probabilityThreshold: 0, invokeCallbackOnNoiseAndUnknown: true, overlapFactor: 0.5 })
         .catch(e => { throw blocked(e, 'Microphone'); });
     } else {
@@ -172,9 +272,9 @@ async function loadModel() {
       model = next;
       if (!stream) await startCamera();
     }
-    status(`${kind} model · ${labels.length} classes`);
+    status(t('{0} model · {1} classes', t(kind), labels.length));
   } catch (e) {
-    status((e.name === 'NotAllowedError' ? '' : 'Error: ') + e.message);
+    status((e.name === 'NotAllowedError' ? '' : t('Error: ')) + e.message);
     console.error(e);
   } finally {
     $('load').disabled = false;
@@ -199,14 +299,14 @@ async function startCamera() {
   $('canvas').hidden = false;
   const active = stream.getVideoTracks()[0].getSettings().deviceId;
   const cams = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput');
-  $('camSel').replaceChildren(...cams.map((c, i) => new Option(c.label || `Camera ${i + 1}`, c.deviceId, false, c.deviceId === active)));
+  $('camSel').replaceChildren(...cams.map((c, i) => new Option(c.label || t('Camera {0}', i + 1), c.deviceId, false, c.deviceId === active)));
   $('camSel').hidden = cams.length < 2;
   if (!looping) { looping = true; loop(); }
 }
 
 // Permission denied: tell the user where to undo it.
 const blocked = (e, what) => e.name !== 'NotAllowedError' ? e : Object.assign(
-  new Error(`${what} blocked – allow it in the site settings (tap the icon left of the address bar), then reload.`), { name: e.name });
+  new Error(t('{0} blocked – allow it in the site settings (tap the icon left of the address bar), then reload.', t(what))), { name: e.name });
 
 function stopCamera() {
   stream?.getTracks().forEach(t => t.stop());
@@ -239,7 +339,7 @@ async function loop() {
       }
     }
   } catch (e) {
-    status('Error: ' + e.message);
+    status(t('Error: ') + e.message);
     console.error(e);
     if (m && m === model) model = null; // keep the camera running, stop the failing model
   }
@@ -255,31 +355,34 @@ function show(probs) {
   });
   bars.forEach((b, i) => b.classList.toggle('top', i === top));
   const now = performance.now();
-  if (probs[top] < threshold()) cand = null;
-  else if (labels[top] !== cand) { cand = labels[top]; candSince = now; }
+  if (probs[top] < threshold()) cand = -1;
+  else if (top !== cand) { cand = top; candSince = now; }
   // Audio results arrive only every ~0.5 s and are already smoothed, so they are sent at once.
-  if (link && cand !== null && cand !== lastSent && (kind === 'audio' || now - candSince >= holdMs)) send(cand);
+  if (!link || cand < 0 || (kind !== 'audio' && now - candSince < holdMs)) return;
+  const msg = { idx: top, id: ids[top], conf: Math.round(probs[top] * 100) };
+  const same = lastSent && lastSent.idx === top && lastSent.id === msg.id;
+  if (!same || (Math.abs(msg.conf - lastSent.conf) >= CONF_STEP && now - lastSent.at >= CONF_EVERY_MS)) send(msg);
 }
 
 // ---------- micro:bit link ----------
 
-// Sends "label\n". While a write is in flight only the newest label is kept.
-// A write that fails or hangs is given up after 3 s; show() then retries it because lastSent is unchanged.
-async function send(label) {
-  pending = label;
+// Sends "id,confidence,name\n" (name last, so it may contain commas). While a write is in flight only
+// the newest message is kept. A write that fails or hangs is given up after 3 s; show() then retries it.
+async function send(msg) {
+  pending = msg;
   if (busy) return;
   busy = true;
   while (pending !== null && link) {
-    const text = pending;
+    const m = pending, name = labels[m.idx];
     pending = null;
     try {
-      await Promise.race([link.write(new TextEncoder().encode(text + '\n')),
-        new Promise((_, no) => setTimeout(() => no(new Error('no answer from the micro:bit')), 3000))]);
-      lastSent = text;
-      $('sent').textContent = text;
-      log('→ ' + text);
+      await Promise.race([link.write(new TextEncoder().encode(`${m.id},${m.conf},${name}\n`)),
+        new Promise((_, no) => setTimeout(() => no(new Error(t('no answer from the micro:bit'))), 3000))]);
+      if (!(lastSent && lastSent.idx === m.idx && lastSent.id === m.id)) log(`→ ${name} (ID ${m.id})`);
+      lastSent = { ...m, at: performance.now() };
+      $('sent').textContent = `${name} · ID ${m.id} · ${m.conf}%`;
     } catch (e) {
-      log('send failed: ' + e.message);
+      log(t('send failed: ') + e.message);
       await new Promise(r => setTimeout(r, 1000)); // don't retry every frame
     }
   }
@@ -300,7 +403,8 @@ async function connectBle() {
     } catch (e) {
       if (attempt === 3) {
         device.gatt.disconnect();
-        throw /service/i.test(e.message) ? new Error('Bluetooth UART not found – flash the micro:bit with the Teachable Machine extension') : e;
+        throw /service/i.test(e.message) ? new Error(t('Bluetooth UART not found – flash the micro:bit with the Teachable Machine extension'))
+          : new Error(e.message + ' ' + t('If it keeps failing: in MakeCode Project Settings select “No Pairing Required” and flash again.'));
       }
       await new Promise(r => setTimeout(r, 600));
     }
@@ -322,10 +426,10 @@ async function connectUsb() {
   if (!dev.configuration) await dev.selectConfiguration(1);
   const ifaces = dev.configuration.interfaces.filter(i => i.alternates[0].interfaceClass === 0xff);
   const iface = ifaces.find(i => i.alternates[0].endpoints.length) || ifaces[0];
-  if (!iface) throw new Error('no CMSIS-DAP interface – update the micro:bit firmware');
+  if (!iface) throw new Error(t('no CMSIS-DAP interface – update the micro:bit firmware'));
   await dev.claimInterface(iface.interfaceNumber).catch(() => {
     dev.close().catch(() => {});
-    throw new Error('the micro:bit is in use – close MakeCode and other tabs connected to it, then try again');
+    throw new Error(t('the micro:bit is in use – close MakeCode and other tabs connected to it, then try again'));
   });
   const eps = iface.alternates[0].endpoints;
   const epIn = eps.find(e => e.direction === 'in'), epOut = eps.find(e => e.direction === 'out');
@@ -362,15 +466,15 @@ async function connect(fn) {
   try {
     link = await fn();
     lastSent = null; // resend the current class on the next frame
-    log('connected: ' + link.name);
+    log(t('connected: ') + link.name);
     $('linkName').textContent = link.name;
     $('connectRow').hidden = true;
     $('connectedRow').hidden = false;
   } catch (e) {
     console.error(e);
     if (/cancel|no device selected/i.test(e.message)) return; // user closed the chooser
-    log('connect failed: ' + (/adapter/i.test(e.message)
-      ? 'Bluetooth is off – turn on Bluetooth (on Android 11 and older also Location) and try again'
+    log(t('connect failed: ') + (/adapter/i.test(e.message)
+      ? t('Bluetooth is off – turn on Bluetooth (on Android 11 and older also Location) and try again')
       : e.message));
   } finally {
     connecting = false;
@@ -380,7 +484,7 @@ async function connect(fn) {
 function dropped(why) {
   if (!link) return;
   link = null;
-  log('disconnected: ' + why);
+  log(t('disconnected: ') + t(why));
   $('connectRow').hidden = false;
   $('connectedRow').hidden = true;
 }
@@ -390,7 +494,7 @@ function dropped(why) {
 $('load').onclick = loadModel;
 $('url').onkeydown = e => e.key === 'Enter' && loadModel();
 $('th').oninput = () => $('thv').textContent = Math.round(threshold() * 100) + '%';
-const camError = e => status('Camera error: ' + e.message);
+const camError = e => status(t('Camera error: ') + e.message);
 $('camStart').onclick = () => startCamera().catch(camError);
 $('camSel').onchange = () => {
   try { localStorage.setItem('tm-cam', $('camSel').value); } catch {}
@@ -399,10 +503,16 @@ $('camSel').onchange = () => {
 $('ble').onclick = () => connect(connectBle);
 $('usb').onclick = () => connect(connectUsb);
 $('disconnect').onclick = async () => { const l = link; dropped('by user'); try { await l.close(); } catch {} };
+$('lang').onclick = () => {
+  lang = lang === 'el' ? 'en' : 'el';
+  try { localStorage.setItem('tm-lang', lang); } catch {}
+  applyLang();
+};
+applyLang();
 
-if (!navigator.bluetooth) { $('ble').disabled = true; $('ble').title = 'Web Bluetooth not available in this browser'; }
-if (!navigator.usb) { $('usb').disabled = true; $('usb').title = 'WebUSB not available in this browser'; }
-if (!window.isSecureContext) status('Open this page over https:// – camera, Bluetooth and USB need it.');
+if (!navigator.bluetooth) { $('ble').disabled = true; $('ble').title = t('Web Bluetooth not available in this browser'); }
+if (!navigator.usb) { $('usb').disabled = true; $('usb').title = t('WebUSB not available in this browser'); }
+if (!window.isSecureContext) status(t('Open this page over https:// – camera, Bluetooth and USB need it.'));
 navigator.usb?.addEventListener('disconnect', e => link?.dev === e.device && dropped('USB unplugged'));
 document.addEventListener('visibilitychange', () => {
   if (document.hidden || !(stream || recognizer?.isListening())) return;

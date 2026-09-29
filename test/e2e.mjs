@@ -117,6 +117,8 @@ async function load(page) {
   return page.textContent('#status');
 }
 const lines = bytes => new TextDecoder().decode(new Uint8Array(bytes)).split('\n').filter(Boolean);
+// Protocol: "id,confidence,name" – the name is last and may contain commas.
+const msgs = bytes => lines(bytes).map(l => { const [id, conf, ...n] = l.split(','); return { id: +id, conf: +conf, name: n.join(',') }; });
 
 // 1. camera preview without a model, and switching between cameras
 {
@@ -153,9 +155,10 @@ for (const [name, url] of Object.entries(MODELS)) {
     const sum = pcts.reduce((a, b) => a + b, 0);
     const r = await page.evaluate(() => ({ ble: window.__ble, usb: window.__usb, linkName: document.getElementById('linkName').textContent }));
     const bytes = mode === 'ble' ? r.ble.bytes : r.usb.bytes;
-    const sent = lines(bytes);
+    const sent = msgs(bytes).map(m => m.name);
+    const idsOk = msgs(bytes).every(m => m.id === labels.indexOf(m.name) + 1 && m.conf >= 0 && m.conf <= 100);
     const protoOk = mode === 'ble' ? r.ble.chunks.every(n => n <= 20) : r.usb.baud === 115200 && !r.usb.bad.length;
-    check(!/Error/.test(status) && sum >= 95 && sum <= 105 && sent.length > 0 && sent.every(s => labels.includes(s)) && protoOk,
+    check(!/Error/.test(status) && sum >= 95 && sum <= 105 && sent.length > 0 && sent.every(s => labels.includes(s)) && idsOk && protoOk,
       `${name} over ${mode}`, `${status}; sent ${JSON.stringify(sent.slice(0, 4))}${sent.length > 4 ? '…' : ''}; ${mode === 'ble' ? 'chunks ' + r.ble.chunks.slice(0, 4) : 'baud ' + r.usb.baud + ' ' + r.usb.bad.join(',')}`);
     await page.click('#disconnect');
     check(await page.isVisible('#connectRow'), `${name} over ${mode}: disconnect restores buttons`);
@@ -172,10 +175,10 @@ for (const [name, url] of Object.entries(MODELS)) {
     await page.evaluate(b => (window.__usbBulk = b), mode === 'usb-v2');
     await page.click(mode === 'ble' ? '#ble' : '#usb');
     await page.waitForTimeout(500);
-    await page.evaluate(l => send(l), long);
+    await page.evaluate(l => { labels = [l]; send({ idx: 0, id: 7, conf: 90 }); }, long);
     await page.waitForTimeout(500);
     const got = await page.evaluate(m => (m === 'ble' ? window.__ble.bytes : window.__usb.bytes), mode);
-    check(lines(got).at(-1) === long, `long UTF-8 label over ${mode}`);
+    check(lines(got).at(-1) === '7,90,' + long, `long UTF-8 label over ${mode}`);
     await page.click('#disconnect');
   }
   await page.close();
@@ -186,15 +189,15 @@ for (const [name, url] of Object.entries(MODELS)) {
   const page = await open();
   await page.click('#ble');
   await page.waitForTimeout(500);
-  await page.evaluate(() => { __ble.hang = true; send('Stuck'); });
+  await page.evaluate(() => { __ble.hang = true; labels = ['Stuck', 'After']; send({ idx: 0, id: 1, conf: 90 }); });
   await page.waitForTimeout(500);
   await page.click('#disconnect');
   await page.evaluate(() => (__ble.hang = false));
   await page.click('#ble');
   await page.waitForTimeout(4500); // hung write times out after 3 s + 1 s back-off
-  await page.evaluate(() => send('After'));
+  await page.evaluate(() => send({ idx: 1, id: 2, conf: 90 }));
   await page.waitForTimeout(500);
-  const sent = lines(await page.evaluate(() => __ble.bytes));
+  const sent = msgs(await page.evaluate(() => __ble.bytes)).map(m => m.name);
   check(sent.at(-1) === 'After' && !(await page.evaluate(() => busy)), 'sending recovers after a hung write', JSON.stringify(sent));
   await page.close();
 }
@@ -250,8 +253,81 @@ for (const [name, url] of Object.entries(MODELS)) {
   await load(page);
   await page.click('#ble');
   await page.waitForTimeout(4000);
-  const sent = lines(await page.evaluate(() => __ble.bytes));
-  check(sent.length <= 1, 'flickering class is not sent', `${sent.length} sends`);
+  const sent = new Set(msgs(await page.evaluate(() => __ble.bytes)).map(m => m.name));
+  check(sent.size <= 1, 'flickering class is not sent', `${sent.size} classes sent`);
+  await page.close();
+}
+
+// 9. class IDs: editable next to each class, sent, remembered per model
+{
+  const page = await open(MODELS.image);
+  await load(page);
+  await page.evaluate(() => (holdMs = 0));
+  await page.$$eval('input.cid', els => els.forEach((el, i) => { el.value = 40 + i; el.dispatchEvent(new Event('change')); }));
+  await page.click('#ble');
+  await page.waitForTimeout(2500);
+  const labels = await page.$$eval('#bars b', bs => bs.map(b => b.textContent));
+  const got = msgs(await page.evaluate(() => __ble.bytes));
+  check(got.length > 0 && got.every(m => m.id === 40 + labels.indexOf(m.name)), 'edited class IDs are sent', JSON.stringify(got.slice(0, 3)));
+  await page.reload();
+  await load(page);
+  check((await page.$$eval('input.cid', els => els.map(e => +e.value))).every((v, i) => v === 40 + i), 'class IDs remembered after reload');
+  await page.$eval('input.cid', el => { el.value = '-5'; el.dispatchEvent(new Event('change')); });
+  check(await page.$eval('input.cid', el => el.value) === '1', 'invalid ID falls back to the default');
+  await page.close();
+}
+
+// 10. confidence: sent with the class, resent when it moves by 5+ (at most every 250 ms)
+{
+  const page = await open(MODELS.audio);
+  await load(page);
+  await page.evaluate(() => recognizer.stopListening());
+  await page.click('#ble');
+  await page.waitForTimeout(300);
+  const step = (p, wait) => page.evaluate(([p, w]) => new Promise(r => { show([p, 1 - p, 0, 0]); setTimeout(r, w); }), [p, wait]);
+  await page.evaluate(() => { __ble.bytes.length = 0; lastSent = null; });
+  await step(0.9, 300); await step(0.92, 300); await step(0.97, 50); await step(0.8, 300); await step(0.81, 300);
+  const confs = msgs(await page.evaluate(() => __ble.bytes)).map(m => m.conf);
+  check(JSON.stringify(confs) === '[90,97,81]', 'confidence updates are sent on change (80 is rate-limited)', JSON.stringify(confs));
+  await page.close();
+}
+
+// 11. Greek translation
+{
+  const page = await open();
+  await page.click('#lang');
+  const el = await page.evaluate(() => [document.documentElement.lang, $('load').textContent, $('lang').textContent]);
+  await page.reload();
+  const kept = await page.textContent('#load');
+  await page.click('#lang');
+  const en = await page.textContent('#load');
+  check(el.join() === 'el,Φόρτωση,EN' && kept === 'Φόρτωση' && en === 'Load', 'Greek translation toggles and is remembered', el.join() + ' / ' + kept + ' / ' + en);
+  await page.close();
+}
+
+// 12. landscape phone: camera and class bars visible together
+{
+  const land = await browser.newContext({ ...devices['Pixel 7 landscape'], permissions: ['camera', 'microphone'] });
+  await land.addInitScript(mockMicrobit);
+  const page = await land.newPage();
+  await page.goto(BASE + '?model=' + encodeURIComponent(MODELS.image));
+  await load(page);
+  const vh = page.viewportSize().height;
+  const cam = await page.locator('#canvas').boundingBox(), bar = await page.locator('.bar').first().boundingBox();
+  check(cam.y + cam.height <= vh && bar.y + bar.height <= vh && bar.x > cam.x + cam.width - 1, 'landscape: camera and classes side by side', JSON.stringify({ vh, cam, bar }));
+  await page.screenshot({ path: path.join(import.meta.dirname, 'landscape.png') }).catch(() => {});
+  await land.close();
+}
+
+// 13. switching away from an audio model frees it
+{
+  const page = await open(MODELS.audio);
+  await load(page);
+  await page.evaluate(() => (window.__oldRec = recognizer));
+  await page.fill('#url', MODELS.image);
+  await load(page);
+  await page.waitForTimeout(2500);
+  check(await page.evaluate(() => __oldRec.model.weights.every(w => w.val.isDisposed)), 'old audio model freed');
   await page.close();
 }
 

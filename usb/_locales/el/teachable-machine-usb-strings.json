@@ -1,0 +1,12 @@
+{
+  "teachable.ClassInfo.Id|block": "ID",
+  "teachable.ClassInfo.Name|block": "όνομα",
+  "teachable.classAndConfidence|block": "κλάση ($what) και βεβαιότητα",
+  "teachable.classId|block": "ID κλάσης",
+  "teachable.confidence|block": "βεβαιότητα",
+  "teachable.currentClass|block": "ανιχνευμένη κλάση",
+  "teachable.onClassId|block": "όταν ανιχνευτεί η κλάση με ID $id",
+  "teachable.onClass|block": "όταν ανιχνευτεί η κλάση $label",
+  "teachable|block": "Teachable Machine",
+  "{id:category}Teachable": "Teachable Machine"
+}
