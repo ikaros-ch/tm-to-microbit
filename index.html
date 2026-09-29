@@ -20,7 +20,7 @@
   [hidden] { display: none !important; }
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .row > * { flex: 1 1 auto; }
-  input[type=url] { min-width: 0; flex: 1 1 220px; font: inherit; padding: 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
+  input[type=url], select { min-width: 0; flex: 1 1 220px; font: inherit; padding: 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
   input[type=range] { width: 100%; accent-color: var(--accent); }
   button { font: inherit; font-weight: 600; min-height: 48px; padding: 0 18px; border: 0; border-radius: 10px; background: var(--accent); color: var(--on-accent); cursor: pointer; }
   button.ghost { background: transparent; color: var(--accent); border: 1px solid var(--line); }
@@ -53,10 +53,11 @@
     <small id="status">Image, pose and audio models are supported.</small>
   </section>
 
-  <section id="cam" hidden>
-    <canvas id="canvas" width="320" height="320"></canvas>
+  <section id="cam">
+    <canvas id="canvas" width="320" height="320" hidden></canvas>
+    <button id="camStart" class="ghost">Start camera</button>
     <div class="row">
-      <button id="switch" class="ghost">Switch camera</button>
+      <select id="camSel" aria-label="Camera" hidden></select>
       <label><input type="checkbox" id="mirror" checked> Mirror (like TM training)</label>
     </div>
   </section>
@@ -106,7 +107,7 @@ const UART = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
 const SIZE = 320;
 const ctx = $('canvas').getContext('2d');
 const video = Object.assign(document.createElement('video'), { playsInline: true, muted: true, autoplay: true });
-let kind, model, recognizer, stream, labels = [], bars = [], runId = 0, facing = 'user';
+let kind, model, recognizer, stream, labels = [], bars = [], looping = false;
 let link = null, lastSent = null, pending = null, busy = false;
 
 const log = msg => $('log').textContent = `${new Date().toLocaleTimeString()}  ${msg}\n${$('log').textContent}`.slice(0, 4000);
@@ -116,7 +117,7 @@ const threshold = () => +$('th').value;
 // ---------- Teachable Machine ----------
 
 async function loadModel() {
-  stop();
+  if (recognizer?.isListening()) recognizer.stopListening();
   let url = $('url').value.trim().replace(/(model|metadata)\.json.*$/, '');
   if (!url.endsWith('/')) url += '/';
   try { localStorage.setItem('tm-url', url); } catch {}
@@ -126,8 +127,10 @@ async function loadModel() {
     const res = await fetch(url + 'metadata.json');
     if (!res.ok) throw new Error(`no model at ${url} (HTTP ${res.status})`);
     const meta = await res.json();
-    model?.dispose?.();
+    const old = model;
     model = null;
+    setTimeout(() => old?.dispose?.(), 2000); // ponytail: lets an in-flight predict finish; a busy flag if 2 s is ever too short
+    let next;
     if (meta.wordLabels) {
       kind = 'audio';
       recognizer = speechCommands.create('BROWSER_FFT', undefined, url + 'model.json', url + 'metadata.json');
@@ -135,7 +138,7 @@ async function loadModel() {
       labels = recognizer.wordLabels();
     } else {
       kind = /pose/.test(meta.packageName) ? 'pose' : 'image';
-      model = await (kind === 'pose' ? tmPose : tmImage).load(url + 'model.json', url + 'metadata.json');
+      next = await (kind === 'pose' ? tmPose : tmImage).load(url + 'model.json', url + 'metadata.json');
       labels = meta.labels;
     }
     $('bars').replaceChildren(...labels.map(name => {
@@ -147,7 +150,18 @@ async function loadModel() {
     }));
     bars = [...$('bars').children];
     $('preds').hidden = false;
-    await start();
+    navigator.wakeLock?.request('screen').catch(() => {});
+    if (kind === 'audio') {
+      stopCamera();
+      $('cam').hidden = true;
+      const r = recognizer;
+      await r.listen(res => r === recognizer && show(Array.from(res.scores)),
+        { probabilityThreshold: 0, invokeCallbackOnNoiseAndUnknown: true, overlapFactor: 0.5 });
+    } else {
+      $('cam').hidden = false;
+      model = next;
+      if (!stream) await startCamera();
+    }
     status(`${kind} model · ${labels.length} classes`);
   } catch (e) {
     status('Error: ' + e.message);
@@ -157,31 +171,39 @@ async function loadModel() {
   }
 }
 
-async function start() {
-  const id = ++runId;
-  navigator.wakeLock?.request('screen').catch(() => {});
-  if (kind === 'audio') {
-    $('cam').hidden = true;
-    await recognizer.listen(r => id === runId && show(Array.from(r.scores)),
-      { probabilityThreshold: 0, invokeCallbackOnNoiseAndUnknown: true, overlapFactor: 0.5 });
-    return;
-  }
-  $('cam').hidden = false;
-  stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: facing, width: { ideal: 640 }, height: { ideal: 480 } } });
+// ---------- camera ----------
+
+// Opens the preferred camera (remembered per device) and lists all cameras once permission is granted.
+async function startCamera() {
+  stopCamera();
+  let camId = '';
+  try { camId = localStorage.getItem('tm-cam') || ''; } catch {}
+  const size = { width: { ideal: 640 }, height: { ideal: 480 } };
+  const open = video => navigator.mediaDevices.getUserMedia({ audio: false, video });
+  stream = await (camId ? open({ ...size, deviceId: { exact: camId } }) : Promise.reject())
+    .catch(() => open({ ...size, facingMode: 'user' })); // no or unplugged preferred camera
   video.srcObject = stream;
   await video.play();
-  loop(id);
+  $('camStart').hidden = true;
+  $('canvas').hidden = false;
+  const active = stream.getVideoTracks()[0].getSettings().deviceId;
+  const cams = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput');
+  $('camSel').replaceChildren(...cams.map((c, i) => new Option(c.label || `Camera ${i + 1}`, c.deviceId, false, c.deviceId === active)));
+  $('camSel').hidden = cams.length < 2;
+  if (!looping) { looping = true; loop(); }
 }
 
-function stop() {
-  runId++;
+function stopCamera() {
   stream?.getTracks().forEach(t => t.stop());
   stream = null;
-  if (recognizer?.isListening()) recognizer.stopListening();
+  $('camStart').hidden = false;
+  $('canvas').hidden = true;
 }
 
-async function loop(id) {
-  if (id !== runId) return;
+// Draws every camera frame; classifies it when an image or pose model is loaded.
+async function loop() {
+  if (!stream) { looping = false; return; }
+  const m = model;
   try {
     const s = Math.min(video.videoWidth, video.videoHeight);
     if (s) {
@@ -189,22 +211,24 @@ async function loop(id) {
       if ($('mirror').checked) { ctx.translate(SIZE, 0); ctx.scale(-1, 1); }
       ctx.drawImage(video, (video.videoWidth - s) / 2, (video.videoHeight - s) / 2, s, s, 0, 0, SIZE, SIZE);
       ctx.restore();
-      let preds;
-      if (kind === 'pose') {
-        const { pose, posenetOutput } = await model.estimatePose($('canvas'));
-        preds = await model.predict(posenetOutput);
-        if (pose) { tmPose.drawKeypoints(pose.keypoints, 0.5, ctx); tmPose.drawSkeleton(pose.keypoints, 0.5, ctx); }
-      } else {
-        preds = await model.predict($('canvas'));
+      if (m) {
+        let preds;
+        if (kind === 'pose') {
+          const { pose, posenetOutput } = await m.estimatePose($('canvas'));
+          preds = await m.predict(posenetOutput);
+          if (pose) { tmPose.drawKeypoints(pose.keypoints, 0.5, ctx); tmPose.drawSkeleton(pose.keypoints, 0.5, ctx); }
+        } else {
+          preds = await m.predict($('canvas'));
+        }
+        if (m === model) show(preds.map(p => p.probability));
       }
-      if (id === runId) show(preds.map(p => p.probability));
     }
   } catch (e) {
     status('Error: ' + e.message);
     console.error(e);
-    return;
+    if (m && m === model) model = null; // keep the camera running, stop the failing model
   }
-  requestAnimationFrame(() => loop(id));
+  requestAnimationFrame(loop);
 }
 
 function show(probs) {
@@ -327,7 +351,12 @@ function dropped(why) {
 $('load').onclick = loadModel;
 $('url').onkeydown = e => e.key === 'Enter' && loadModel();
 $('th').oninput = () => $('thv').textContent = Math.round(threshold() * 100) + '%';
-$('switch').onclick = () => { facing = facing === 'user' ? 'environment' : 'user'; stop(); start().catch(e => status('Error: ' + e.message)); };
+const camError = e => status('Camera error: ' + e.message);
+$('camStart').onclick = () => startCamera().catch(camError);
+$('camSel').onchange = () => {
+  try { localStorage.setItem('tm-cam', $('camSel').value); } catch {}
+  startCamera().catch(camError);
+};
 $('ble').onclick = () => connect(connectBle);
 $('usb').onclick = () => connect(connectUsb);
 $('disconnect').onclick = async () => { const l = link; dropped('by user'); try { await l.close(); } catch {} };
