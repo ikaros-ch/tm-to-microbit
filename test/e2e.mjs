@@ -28,14 +28,18 @@ if (!BASE) {
 // Runs in the page before its scripts: fake micro:bit over Web Bluetooth and WebUSB.
 function mockMicrobit() {
   const UART = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
-  window.__ble = { bytes: [], chunks: [] };
+  window.__ble = { bytes: [], chunks: [], requests: 0, hang: false, error: null };
   window.__usb = { baud: null, bytes: [], bad: [] };
   const bytesOf = v => new Uint8Array(v.buffer ? v.buffer.slice(v.byteOffset, v.byteOffset + v.byteLength) : v);
 
   Object.defineProperty(navigator, 'bluetooth', { configurable: true, value: {
     requestDevice: async () => {
+      __ble.requests++;
+      await new Promise(r => setTimeout(r, 200));
+      if (__ble.error) throw Object.assign(new Error(__ble.error), { name: 'NotFoundError' });
       const on = {};
       const rx = { properties: { write: true, writeWithoutResponse: true }, writeValue: async v => {
+        if (__ble.hang) return new Promise(() => {}); // a write that never completes
         const b = bytesOf(v);
         if (b.length > 20) throw new Error('mock: BLE write > 20 bytes');
         __ble.chunks.push(b.length); __ble.bytes.push(...b);
@@ -46,7 +50,7 @@ function mockMicrobit() {
           if (u !== UART) throw new Error('mock: no service ' + u);
           return { getCharacteristics: async () => [tx, rx] };
         } }),
-        disconnect: () => on.gattserverdisconnected?.(),
+        disconnect: () => { on.gattserverdisconnected?.(); device.ongattserverdisconnected?.(); },
       } };
       window.__bleDevice = device;
       return device;
@@ -139,7 +143,8 @@ const lines = bytes => new TextDecoder().decode(new Uint8Array(bytes)).split('\n
 for (const [name, url] of Object.entries(MODELS)) {
   for (const mode of ['ble', 'usb-v1', 'usb-v2']) {
     const page = await open(url);
-    await page.evaluate(b => (window.__usbBulk = b), mode === 'usb-v2');
+    // The fake camera flickers between classes every frame, which the 300 ms hold filters out (see test 8).
+    await page.evaluate(([b, n]) => { window.__usbBulk = b; if (n === 'image') holdMs = 0; }, [mode === 'usb-v2', name]);
     const status = await load(page);
     await page.click(mode === 'ble' ? '#ble' : '#usb');
     await page.waitForTimeout(4000);
@@ -173,6 +178,80 @@ for (const [name, url] of Object.entries(MODELS)) {
     check(lines(got).at(-1) === long, `long UTF-8 label over ${mode}`);
     await page.click('#disconnect');
   }
+  await page.close();
+}
+
+// 4. a hung Bluetooth write doesn't block sending forever, and is retried
+{
+  const page = await open();
+  await page.click('#ble');
+  await page.waitForTimeout(500);
+  await page.evaluate(() => { __ble.hang = true; send('Stuck'); });
+  await page.waitForTimeout(500);
+  await page.click('#disconnect');
+  await page.evaluate(() => (__ble.hang = false));
+  await page.click('#ble');
+  await page.waitForTimeout(4500); // hung write times out after 3 s + 1 s back-off
+  await page.evaluate(() => send('After'));
+  await page.waitForTimeout(500);
+  const sent = lines(await page.evaluate(() => __ble.bytes));
+  check(sent.at(-1) === 'After' && !(await page.evaluate(() => busy)), 'sending recovers after a hung write', JSON.stringify(sent));
+  await page.close();
+}
+
+// 5. double tap on Bluetooth starts one connect; errors that need a hint are shown, cancel is silent
+{
+  const page = await open();
+  await page.evaluate(() => { document.getElementById('ble').click(); document.getElementById('ble').click(); });
+  await page.waitForTimeout(800);
+  check(await page.evaluate(() => __ble.requests) === 1, 'double tap = one Bluetooth connect');
+  await page.click('#disconnect');
+  await page.evaluate(() => (__ble.error = 'User cancelled the requestDevice() chooser.'));
+  await page.click('#ble');
+  await page.waitForTimeout(500);
+  check(!/cancel/.test(await page.textContent('#log')), 'chooser cancel is silent');
+  await page.evaluate(() => (__ble.error = 'Bluetooth adapter not available.'));
+  await page.click('#ble');
+  await page.waitForTimeout(500);
+  check(/turn on Bluetooth/.test(await page.textContent('#log')), 'Bluetooth off shows a hint');
+  await page.close();
+}
+
+// 6. link input: empty, missing https://, not a TM link
+{
+  const page = await open();
+  await page.$eval('#url', el => (el.value = '')); // page.fill('') doesn't clear it in mobile emulation
+  await page.click('#load');
+  const st = await page.textContent('#status');
+  check(/Paste your Teachable Machine/.test(st), 'empty link explains what to paste', st);
+  await page.fill('#url', MODELS.audio.replace('https://', ''));
+  check(/audio model/.test(await load(page)), 'link without https:// works');
+  await page.fill('#url', 'https://example.invalid/foo');
+  check(/Export model/.test(await load(page)), 'wrong link explains where to get one');
+  await page.close();
+}
+
+// 7. switching models (image -> pose -> audio -> image) without errors
+{
+  const page = await open(MODELS.image);
+  let ok = true;
+  for (const url of [MODELS.image, MODELS.pose, MODELS.audio, MODELS.image]) {
+    await page.fill('#url', url);
+    ok = /model ·/.test(await load(page)) && ok;
+    await page.waitForTimeout(2500); // old model is freed after 2 s
+  }
+  check(ok && !page.errors.length, 'switch between models', page.errors.slice(0, 3).join(' | '));
+  await page.close();
+}
+
+// 8. a class flickering every frame is not sent (hold time)
+{
+  const page = await open(MODELS.image);
+  await load(page);
+  await page.click('#ble');
+  await page.waitForTimeout(4000);
+  const sent = lines(await page.evaluate(() => __ble.bytes));
+  check(sent.length <= 1, 'flickering class is not sent', `${sent.length} sends`);
   await page.close();
 }
 

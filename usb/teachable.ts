@@ -41,5 +41,7 @@ namespace teachable {
         return current
     }
 
+    // The default 20-byte receive buffer would drop longer class names. The Bluetooth UART buffer is fixed at ~60 bytes.
+    serial.setRxBufferSize(128)
     serial.onDataReceived(serial.delimiters(Delimiters.NewLine), () => receive(serial.readUntil(serial.delimiters(Delimiters.NewLine))))
 }

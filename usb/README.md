@@ -15,3 +15,5 @@ input.onButtonPressed(Button.A, function () {
 * `detected class`: the last class received.
 
 The web app sends the class name and a newline over the micro:bit's USB serial (115200 baud).
+
+Nothing happens? Press button A: if it shows the class, the name in `on class` doesn't match Teachable Machine exactly. The micro:bit shows no sign when the web app connects over USB. Keep class names under 60 characters.
