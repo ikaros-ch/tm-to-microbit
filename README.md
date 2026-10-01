@@ -82,4 +82,4 @@ Two more kinds of line feed the `confidence of class …` blocks: `@index,id,nam
 ## Develop
 
 `index.html` is the whole web app. Run `python -m http.server` and open `http://localhost:8000` (localhost counts as a secure context).
-To build an extension, run `npx pxt target microbit && npx pxt install && npx pxt build` in `usb/` or `bluetooth/`. `bluetooth/` depends on `usb/` at a git tag, so bump both `version`s and the tag in `bluetooth/pxt.json` together when you release.
+To build an extension, run `npx pxt target microbit && npx pxt install && npx pxt build` in `usb/` or `bluetooth/`. `bluetooth/` depends on `usb/` at a git tag, so bump both `version`s and the tag in `bluetooth/pxt.json` together when you release. Keep the root `pxt.json`: MakeCode reads it before it can find the `usb/` and `bluetooth/` extensions.

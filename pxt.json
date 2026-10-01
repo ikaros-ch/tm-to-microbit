@@ -1,0 +1,15 @@
+{
+    "name": "tm-to-microbit",
+    "version": "0.5.1",
+    "description": "Teachable Machine to micro:bit. Add .../tm-to-microbit/bluetooth or .../tm-to-microbit/usb instead of this URL.",
+    "license": "MIT",
+    "dependencies": {
+        "core": "*"
+    },
+    "files": [
+        "README.md"
+    ],
+    "supportedTargets": [
+        "microbit"
+    ]
+}
