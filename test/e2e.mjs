@@ -418,6 +418,26 @@ for (const [name, url] of Object.entries(MODELS)) {
   await page.close();
 }
 
+// 18. camera start is tolerant (falls back to an unconstrained request) and explains why it can't open
+{
+  const fails = { picky: ['OverconstrainedError', 'OverconstrainedError'], busy: ['NotReadableError', 'NotReadableError', 'NotReadableError'], none: ['NotFoundError', 'NotFoundError', 'NotFoundError'] };
+  for (const [name, errs] of Object.entries(fails)) {
+    const page = await ctx.newPage();
+    await page.addInitScript(errs => {
+      const real = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+      let n = 0;
+      navigator.mediaDevices.getUserMedia = c => (n < errs.length ? Promise.reject(Object.assign(new Error('x'), { name: errs[n++] })) : real(c));
+    }, errs);
+    await page.goto(BASE);
+    await page.click('#camStart');
+    await page.waitForTimeout(1500);
+    const st = await page.textContent('#status'), shown = await page.$eval('#canvas', e => !e.hidden);
+    const ok = name === 'picky' ? shown : !shown && (name === 'busy' ? /in use by another/ : /No Camera found/).test(st);
+    check(ok, `camera: ${name} device`, `${shown ? 'opened' : st}`);
+    await page.close();
+  }
+}
+
 await browser.close();
 server?.close();
 console.log(failed ? `\n${failed} FAILED` : '\nALL PASSED');
