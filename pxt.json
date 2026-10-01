@@ -1,6 +1,6 @@
 {
     "name": "tm-to-microbit",
-    "version": "0.5.2",
+    "version": "0.6.0",
     "description": "Teachable Machine classes on the micro:bit, from the tm-to-microbit web app over Bluetooth or USB.",
     "license": "MIT",
     "dependencies": {
