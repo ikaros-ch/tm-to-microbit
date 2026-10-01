@@ -1,7 +1,7 @@
 {
     "name": "tm-to-microbit",
-    "version": "0.5.1",
-    "description": "Teachable Machine to micro:bit. Add .../tm-to-microbit/bluetooth or .../tm-to-microbit/usb instead of this URL.",
+    "version": "0.5.2",
+    "description": "Teachable Machine classes on the micro:bit, from the tm-to-microbit web app over Bluetooth or USB.",
     "license": "MIT",
     "dependencies": {
         "core": "*"
