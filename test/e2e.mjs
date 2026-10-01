@@ -224,7 +224,14 @@ for (const [name, url] of Object.entries(MODELS)) {
 // 6. link input: empty, missing https://, not a TM link
 {
   const page = await open();
-  await page.$eval('#url', el => (el.value = '')); // page.fill('') doesn't clear it in mobile emulation
+  // Real key presses: erasing and typing must work (a handler returning false once blocked them).
+  await page.$eval('#url', el => (el.value = 'abc'));
+  await page.click('#url');
+  await page.keyboard.press('End');
+  for (let i = 0; i < 3; i++) await page.keyboard.press('Backspace');
+  await page.keyboard.type('xy');
+  check(await page.inputValue('#url') === 'xy', 'link box: erase and type with the keyboard', await page.inputValue('#url'));
+  for (let i = 0; i < 2; i++) await page.keyboard.press('Backspace');
   await page.click('#load');
   const st = await page.textContent('#status');
   check(/Paste your Teachable Machine/.test(st), 'empty link explains what to paste', st);

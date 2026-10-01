@@ -570,7 +570,7 @@ function dropped(why) {
 // ---------- UI ----------
 
 $('load').onclick = loadModel;
-$('url').onkeydown = e => e.key === 'Enter' && loadModel();
+$('url').onkeydown = e => { if (e.key === 'Enter') loadModel(); }; // no return value: false would block typing
 $('th').oninput = () => $('thv').textContent = Math.round(threshold() * 100) + '%';
 const camError = e => status(() => t('Camera error: ') + e.message, true);
 $('camStart').onclick = () => startCamera().catch(camError);
