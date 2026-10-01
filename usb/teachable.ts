@@ -1,12 +1,14 @@
 /**
  * Receive Teachable Machine classes from the tm-to-microbit web app over USB.
  * The web app sends lines ending in a newline: "id,confidence,name" when the class (or its confidence)
- * changes, "@index,id,name" once per class, and "#c0,c1,..." with the confidence of every class.
+ * changes, "@index,id,name" once per class, "#c0,c1,..." with the confidence of every class, and
+ * "!button,state" (state 1 = pressed, 0 = released) for the web app's two buttons.
  */
 //% color=#1a73e8 icon="" block="Teachable Machine"
 namespace teachable {
     const EVENT_ID = 9051 // custom event source; event value = index of the label + 1
     const ID_EVENT_ID = 9052 // custom event source; event value = class ID + 1
+    const WEB_BUTTON_EVENT_ID = 9053 // custom event source; event value = button * 10 + WebButtonEvent
     // Created on first use: when the extension is opened as a project, MakeCode runs
     // the user's code before this file's top level.
     let labels: string[]
@@ -17,6 +19,21 @@ namespace teachable {
     let tableIds: number[]
     let tableNames: string[]
     let confs: number[]
+    let webDown = [false, false, false] // index 1 and 2: web button held down
+
+    export enum WebButton {
+        //% block="1"
+        One = 1,
+        //% block="2"
+        Two = 2
+    }
+
+    export enum WebButtonEvent {
+        //% block="pressed"
+        Pressed = 1,
+        //% block="released"
+        Released = 2
+    }
 
     export enum ClassInfo {
         //% block="name"
@@ -32,6 +49,10 @@ namespace teachable {
     export function receive(line: string) {
         if (line.charAt(0) == "@") {
             receiveTableRow(line.substr(1))
+            return
+        }
+        if (line.charAt(0) == "!") {
+            receiveWebButton(line.substr(1))
             return
         }
         if (line.charAt(0) == "#") {
@@ -115,6 +136,37 @@ namespace teachable {
     export function classAndConfidence(what: ClassInfo): string {
         if (current == "" && currentId < 0) return ""
         return (what == ClassInfo.Id ? "" + currentId : current) + " " + conf + "%"
+    }
+
+    // "button,state": the web app's button 1 or 2 was pressed (1) or released (0).
+    function receiveWebButton(row: string) {
+        const a = row.indexOf(",")
+        if (a < 0) return
+        const button = parseInt(row.substr(0, a))
+        if (button != 1 && button != 2) return
+        const down = parseInt(row.substr(a + 1)) == 1
+        if (down == webDown[button]) return
+        webDown[button] = down
+        control.raiseEvent(WEB_BUTTON_EVENT_ID, button * 10 + (down ? WebButtonEvent.Pressed : WebButtonEvent.Released))
+    }
+
+    /**
+     * Runs when a button in the web app is pressed or released, like the A and B buttons on the micro:bit.
+     * @param button which web button, eg: WebButton.One
+     * @param event pressed or released
+     */
+    //% blockId=teachable_on_web_button block="on web button $button $event" weight=40
+    export function onWebButton(button: WebButton, event: WebButtonEvent, handler: () => void) {
+        control.onEvent(WEB_BUTTON_EVENT_ID, button * 10 + event, handler)
+    }
+
+    /**
+     * True while the web app's button is held down.
+     * @param button which web button, eg: WebButton.One
+     */
+    //% blockId=teachable_web_button_pressed block="web button $button is pressed" weight=39
+    export function webButtonPressed(button: WebButton): boolean {
+        return webDown[button]
     }
 
     // "index,id,name": one class of the model. Index 0 starts a new table.

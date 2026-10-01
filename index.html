@@ -25,6 +25,8 @@
   input[type=range] { width: 100%; accent-color: var(--accent); }
   button { font: inherit; font-weight: 600; min-height: 48px; padding: 0 18px; border: 0; border-radius: 10px; background: var(--accent); color: var(--on-accent); cursor: pointer; }
   button.ghost { background: transparent; color: var(--accent); border: 1px solid var(--line); }
+  button.wb { min-height: 64px; font-size: 1.1rem; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+  button.wb.down { background: var(--ok); color: #fff; }
   button.ghost.active { background: var(--accent); color: var(--on-accent); }
   #lang { min-height: 40px; padding: 0 12px; flex: none; }
   button:disabled { opacity: .45; cursor: default; }
@@ -127,6 +129,11 @@
       <span id="linkName"></span>
       <button id="disconnect" class="ghost" data-t="disconnect">Disconnect</button>
     </div>
+    <div class="row" id="webButtons">
+      <button id="wb1" class="wb" aria-pressed="false"><span data-t="webButton">Button</span> 1</button>
+      <button id="wb2" class="wb" aria-pressed="false"><span data-t="webButton">Button</span> 2</button>
+    </div>
+    <small data-t="webButtonHint">Like the A and B buttons: hold to keep them pressed. Use the “web button” blocks on the micro:bit.</small>
     <small id="bleWarn" class="warn" data-t="bleWarn">Bluetooth: in MakeCode ⚙ Project Settings select “No Pairing Required”. Music blocks together with Bluetooth can stop the micro:bit with error 070 – use the USB extension for music.</small>
     <label class="stack"><span><span data-t="threshold">Send class when confidence ≥</span> <output id="thv">80%</output></span>
       <input type="range" id="th" min="0.5" max="1" step="0.05" value="0.8">
@@ -165,7 +172,7 @@ const video = Object.assign(document.createElement('video'), { playsInline: true
 let kind, model, recognizer, stream, modelUrl = '', labels = [], ids = [], bars = [], looping = false;
 let link = null, lastSent = null, busy = false, connecting = false, cand = -1, candSince = 0;
 let holdMs = 300; // a camera class must stay on top this long (ms) before it is sent (stops flicker)
-let out = { table: [], main: null, all: null }, tableSent = false, lastAll = null; // see flush()
+let out = { buttons: [], table: [], main: null, all: null }, tableSent = false, lastAll = null; // see flush()
 const CONF_STEP = 5, CONF_EVERY_MS = 250; // resend the same class when its confidence moved this much, at most this often
 
 // ---------- Greek translation ----------
@@ -197,6 +204,8 @@ const EL = {
     + '<a href="microbit-test-bluetooth.hex" download>Bluetooth</a> · <a href="microbit-test-usb.hex" download>USB</a>.',
   step2: 'Για Bluetooth: στο MakeCode ανοίξτε ⚙ → <b>Ρυθμίσεις έργου</b> και επιλέξτε <b>No Pairing Required</b>. Μη χρησιμοποιείτε μπλοκ μουσικής με Bluetooth (σφάλμα 070)· χρησιμοποιήστε την επέκταση USB.',
   step3: 'Στο Teachable Machine: <b>Export model → Upload</b>, αντιγράψτε τον σύνδεσμο, επικολλήστε τον παραπάνω (ή μόνο το ID στο τέλος του συνδέσμου, ή σαρώστε το QR code του) και πατήστε <b>Φόρτωση</b>.',
+  webButton: 'Κουμπί',
+  webButtonHint: 'Όπως τα κουμπιά A και B: κρατήστε πατημένο για να μείνουν πατημένα. Χρησιμοποιήστε τα μπλοκ «κουμπί web» στο micro:bit.',
   step4: 'Πατήστε <b>Bluetooth</b> ή συνδέστε το micro:bit (σε κινητό με καλώδιο OTG / USB-C) και πατήστε <b>USB</b>.',
   'Paste your Teachable Machine model link first (Export model → Upload → copy link).': 'Επικολλήστε πρώτα τον σύνδεσμο του μοντέλου (Export model → Upload → αντιγραφή συνδέσμου).',
   'Loading model…': 'Φόρτωση μοντέλου…',
@@ -546,7 +555,7 @@ function show(probs) {
 
 // Lines to the micro:bit, written one at a time: the class table first, then the detected class, then all
 // confidences. Only the newest detected-class / confidences line is kept while a write is in flight.
-const resetOut = () => { out = { table: [], main: null, all: null }; tableSent = false; lastAll = null; };
+const resetOut = () => { out = { buttons: [], table: [], main: null, all: null }; tableSent = false; lastAll = null; };
 
 // Detected class: "id,confidence,name\n" (name last, so it may contain commas).
 function send(msg) {
@@ -559,12 +568,35 @@ function send(msg) {
   flush();
 }
 
+// The two web buttons ("!button,state"): sent before anything else, never dropped, in order.
+const webDown = [false, false, false];
+function webButton(n, down) {
+  if (webDown[n] === down) return;
+  webDown[n] = down;
+  $('wb' + n).classList.toggle('down', down);
+  $('wb' + n).setAttribute('aria-pressed', down);
+  if (!link) return;
+  out.buttons.push({ text: `!${n},${down ? 1 : 0}`, button: true });
+  flush();
+}
+for (const n of [1, 2]) {
+  const b = $('wb' + n);
+  b.onpointerdown = e => { b.setPointerCapture(e.pointerId); webButton(n, true); };
+  b.onpointerup = b.onpointercancel = () => webButton(n, false);
+  b.onkeydown = e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); if (!e.repeat) webButton(n, true); } };
+  b.onkeyup = e => { if (e.key === ' ' || e.key === 'Enter') webButton(n, false); };
+  b.oncontextmenu = e => e.preventDefault(); // long press on a phone
+}
+const releaseButtons = () => [1, 2].forEach(n => webButton(n, false));
+addEventListener('blur', releaseButtons);
+document.addEventListener('visibilitychange', () => document.hidden && releaseButtons());
+
 // A write that fails or hangs is given up after 3 s; show() then queues it again.
 async function flush() {
   if (busy) return;
   busy = true;
   while (link) {
-    const item = out.table.shift() || out.main || out.all;
+    const item = out.buttons.shift() || out.table.shift() || out.main || out.all;
     if (!item) break;
     if (item === out.main) out.main = null;
     if (item === out.all) out.all = null;
@@ -577,6 +609,7 @@ async function flush() {
     } catch (e) {
       log(t('send failed: ') + e.message);
       if (item.table) { out.table = []; tableSent = false; } // resend the whole table
+      if (item.button) out.buttons.unshift(item); // a press or release must not get lost
       await new Promise(r => setTimeout(r, 1000)); // don't retry every frame
     }
   }
@@ -680,6 +713,7 @@ async function connect(fn) {
 function dropped(why) {
   if (!link) return;
   link = null;
+  releaseButtons(); // on screen only: the link is gone
   log(t('disconnected: ') + t(why));
   $('connectRow').hidden = false;
   $('connectedRow').hidden = true;

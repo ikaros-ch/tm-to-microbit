@@ -131,7 +131,7 @@ async function load(page) {
 }
 const lines = bytes => new TextDecoder().decode(new Uint8Array(bytes)).split('\n').filter(Boolean);
 // Protocol: "id,confidence,name" – the name is last and may contain commas.
-const msgs = bytes => lines(bytes).filter(l => !/^[@#]/.test(l)).map(l => { const [id, conf, ...n] = l.split(','); return { id: +id, conf: +conf, name: n.join(',') }; });
+const msgs = bytes => lines(bytes).filter(l => !/^[@#!]/.test(l)).map(l => { const [id, conf, ...n] = l.split(','); return { id: +id, conf: +conf, name: n.join(',') }; });
 
 // 1. camera preview without a model, and switching between cameras
 {
@@ -562,6 +562,43 @@ for (const [name, url] of Object.entries(MODELS)) {
   const el = await page.evaluate(() => [$('scan').textContent, $('share').textContent, $('zoom').closest('label').textContent.trim()]);
   check(el[0] === 'Σάρωση QR' && el[1] === 'Κοινοποίηση ως QR' && /^Ζουμ/.test(el[2]), 'Greek: scan, share and zoom', el.join(' | '));
   await page.close();
+}
+
+// 24. the two web buttons: pressed/released like the A and B buttons, over Bluetooth and USB
+{
+  for (const mode of ['ble', 'usb-v1', 'usb-v2']) {
+    const page = await open();
+    await page.evaluate(b => (window.__usbBulk = b), mode === 'usb-v2');
+    const wb = async () => lines(await page.evaluate(m => (m === 'ble' ? __ble.bytes : __usb.bytes), mode)).filter(l => l[0] === '!');
+    // not connected: pressing does nothing and breaks nothing
+    await page.click('#wb1');
+    await page.click(mode === 'ble' ? '#ble' : '#usb');
+    await page.waitForTimeout(300);
+    const box = async n => { const b = await page.locator('#wb' + n).boundingBox(); return [b.x + b.width / 2, b.y + b.height / 2]; };
+    let [x, y] = await box(1);
+    await page.mouse.move(x, y); await page.mouse.down();
+    await page.waitForTimeout(150);
+    const heldClass = await page.$eval('#wb1', el => el.classList.contains('down') && el.getAttribute('aria-pressed') === 'true');
+    await page.mouse.up();
+    [x, y] = await box(2);
+    await page.mouse.move(x, y); await page.mouse.down(); await page.mouse.up();
+    for (let i = 0; i < 5; i++) { await page.evaluate(() => { webButton(1, true); webButton(1, false); }); } // fast taps are not lost
+    await page.focus('#wb2'); await page.keyboard.down('Space'); await page.keyboard.up('Space');
+    await page.waitForTimeout(800);
+    const got = await wb();
+    const want = ['!1,1', '!1,0', '!2,1', '!2,0', ...Array(5).fill(['!1,1', '!1,0']).flat(), '!2,1', '!2,0'];
+    check(JSON.stringify(got) === JSON.stringify(want) && heldClass, `web buttons over ${mode}`, JSON.stringify(got));
+    // released when the page loses focus; a drop releases them on screen
+    await page.evaluate(() => webButton(2, true));
+    await page.evaluate(() => dispatchEvent(new Event('blur')));
+    await page.waitForTimeout(300);
+    check((await wb()).slice(-2).join() === '!2,1,!2,0', `web button released on blur (${mode})`);
+    await page.evaluate(() => webButton(1, true));
+    await page.click('#disconnect');
+    check(await page.$eval('#wb1', el => !el.classList.contains('down')), `web button released on screen when disconnected (${mode})`);
+    check(!page.errors.length, `web buttons (${mode}): no console errors`, page.errors.slice(0, 2).join(' | '));
+    await page.close();
+  }
 }
 
 await browser.close();

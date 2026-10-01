@@ -18,6 +18,7 @@ teachable.onClass("Class 1", function () {
 * `detected class`, `class ID`, `confidence` (0–100): the last class received. The confidence keeps updating while the class is shown, also when it drops below the web app's slider.
 * `detected class [name|ID] and confidence`: text such as `Class 1 87%` (empty before the first class), handy with `show string`.
 * `confidence of class ID (2)` / `confidence of class "Class 2"`: how sure the model is about *that* class right now (0–100), whether or not it is the detected one.
+* `on web button [1|2] [pressed|released]` and `web button [1|2] is pressed`: the two big **Button 1 / Button 2** buttons in the web app, like the A and B buttons on the micro:bit (hold to keep pressed). They work as soon as the web app is connected.
 
 Blocks are available in English and Greek; MakeCode uses the language chosen in its settings.
 

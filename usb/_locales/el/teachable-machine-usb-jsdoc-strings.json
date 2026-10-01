@@ -11,5 +11,10 @@
   "teachable.onClass": "Εκτελείται όταν η εφαρμογή ανιχνεύσει αυτή την κλάση.",
   "teachable.onClassId": "Εκτελείται όταν η εφαρμογή ανιχνεύσει την κλάση με αυτό το ID (ορίζεται δίπλα σε κάθε κλάση στην εφαρμογή).",
   "teachable.onClassId|param|id": "ID κλάσης, π.χ.: 1",
-  "teachable.onClass|param|label": "όνομα κλάσης ακριβώς όπως στο Teachable Machine, π.χ.: \"Class 1\""
+  "teachable.onClass|param|label": "όνομα κλάσης ακριβώς όπως στο Teachable Machine, π.χ.: \"Class 1\"",
+  "teachable.onWebButton": "Εκτελείται όταν πατηθεί ή αφεθεί ένα κουμπί στην εφαρμογή, όπως τα κουμπιά A και B του micro:bit.",
+  "teachable.onWebButton|param|button": "ποιο κουμπί web, π.χ.: WebButton.One",
+  "teachable.onWebButton|param|event": "πατηθεί ή αφεθεί",
+  "teachable.webButtonPressed": "Αληθές όσο το κουμπί της εφαρμογής είναι πατημένο.",
+  "teachable.webButtonPressed|param|button": "ποιο κουμπί web, π.χ.: WebButton.One"
 }
