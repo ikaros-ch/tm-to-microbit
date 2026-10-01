@@ -99,6 +99,19 @@ const browser = await chromium.launch({
 });
 const ctx = await browser.newContext({ ...devices['Pixel 7'], permissions: ['camera', 'microphone'] });
 await ctx.addInitScript(mockMicrobit);
+// When a test sets window.__qrSrc (an image data URL) the "camera" shows that image, so QR scanning can be tested.
+await ctx.addInitScript(() => {
+  const real = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+  navigator.mediaDevices.getUserMedia = c => {
+    if (!window.__qrSrc) return real(c);
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = 400;
+    const x = cv.getContext('2d'), img = new Image();
+    img.src = window.__qrSrc;
+    (function draw() { x.fillStyle = '#fff'; x.fillRect(0, 0, 400, 400); if (img.complete) x.drawImage(img, 20, 20, 360, 360); requestAnimationFrame(draw); })();
+    return Promise.resolve(cv.captureStream(15));
+  };
+});
 let failed = 0;
 const check = (ok, name, detail = '') => { if (!ok) failed++; console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail ? ' – ' + detail : ''}`); };
 
@@ -436,6 +449,119 @@ for (const [name, url] of Object.entries(MODELS)) {
     check(ok, `camera: ${name} device`, `${shown ? 'opened' : st}`);
     await page.close();
   }
+}
+
+// 19. what can be typed or scanned: link, bare ID, model.json link, this app's share link
+{
+  const page = await open();
+  const tm = id => `https://teachablemachine.withgoogle.com/models/${id}/`;
+  const cases = [
+    ['66wwsgmTN', tm('66wwsgmTN')], ['  _hpiK-Ruz ', tm('_hpiK-Ruz')], ['-8plkUnZl', tm('-8plkUnZl')],
+    [tm('66wwsgmTN'), tm('66wwsgmTN')], [tm('66wwsgmTN') + 'model.json', tm('66wwsgmTN')],
+    ['teachablemachine.withgoogle.com/models/66wwsgmTN', tm('66wwsgmTN')],
+    ['https://ikaros-ch.github.io/tm-to-microbit/?model=66wwsgmTN', tm('66wwsgmTN')],
+    ['https://ikaros-ch.github.io/tm-to-microbit/?model=' + encodeURIComponent('https://example.org/m/'), 'https://example.org/m/'],
+    ['example.org/m', 'https://example.org/m/'], ['', ''],
+  ];
+  const got = await page.evaluate(cs => cs.map(([i]) => modelLink(i)), cases);
+  const bad = cases.filter(([, want], i) => got[i] !== want).map(([i], k) => `${i} -> ${got[cases.findIndex(c => c[0] === i)]}`);
+  check(!bad.length, 'model link / ID / share link are understood', bad.join(' | '));
+  const strict = await page.evaluate(() => ['https://example.org/', 'hello world', 'hi', '', 'https://www.google.com/search?q=x'].map(s => modelLink(s, true)));
+  check(strict.every(s => s === ''), 'QR codes that are not models are rejected', JSON.stringify(strict));
+  await page.fill('#url', '_hpiK-Ruz');
+  check(/image model/.test(await load(page)), 'a bare model ID loads the model');
+  await page.close();
+}
+
+// 20. zoom: crop rectangle, slider, dragging, remembered
+{
+  const page = await open(MODELS.image);
+  await load(page);
+  const rect = await page.evaluate(() => { zoom = 2; cropX = cropY = .5; return cropRect(640, 480); });
+  check(rect.s === 240 && rect.x === 200 && rect.y === 120, 'zoom 2 crops the centre quarter', JSON.stringify(rect));
+  const edge = await page.evaluate(() => { cropX = 0; cropY = 1; return cropRect(640, 480); });
+  check(edge.x === 0 && edge.y === 240, 'the crop stays inside the picture', JSON.stringify(edge));
+  // The area of the camera picture that is drawn into the canvas (and so given to the model) follows the slider.
+  await page.evaluate(() => { const orig = ctx.drawImage.bind(ctx); ctx.drawImage = (...a) => { window.__src = a.slice(1, 5); return orig(...a); }; });
+  const drawn = async z => {
+    await page.$eval('#zoom', (el, z) => { el.value = z; el.dispatchEvent(new Event('input')); }, z);
+    await page.waitForTimeout(400);
+    return page.evaluate(() => { const r = cropRect(video.videoWidth, video.videoHeight); return { src: window.__src, want: [r.x, r.y, r.s, r.s] }; });
+  };
+  await page.click('#zoomReset');
+  const wide = await drawn(1), tight = await drawn(3);
+  check(JSON.stringify(tight.src) === JSON.stringify(tight.want) && tight.src[2] === wide.src[2] / 3 && await page.textContent('#zv') === '3×',
+    'zoom slider zooms the picture the model sees', `source square ${wide.src[2]} -> ${tight.src[2]}`);
+  await page.$eval('#zoom', el => { el.value = 4; el.dispatchEvent(new Event('input')); });
+  // drag the picture: the chosen area moves the other way (mirrored picture: the same way)
+  const box = await page.locator('#canvas').boundingBox();
+  const drag = async (dx, dy) => { await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await page.mouse.down(); await page.mouse.move(box.x + box.width / 2 + dx, box.y + box.height / 2 + dy, { steps: 5 }); await page.mouse.up(); };
+  await page.$eval('#mirror', el => (el.checked = true));
+  await page.evaluate(() => (cropX = cropY = .5));
+  await drag(40, 0);
+  const mirrored = await page.evaluate(() => [cropX, cropY]);
+  await page.$eval('#mirror', el => (el.checked = false));
+  await page.evaluate(() => (cropX = cropY = .5));
+  await drag(40, 40);
+  const plain = await page.evaluate(() => [cropX, cropY]);
+  check(mirrored[0] > .5 && plain[0] < .5 && plain[1] < .5, 'dragging moves the chosen area', `mirrored ${mirrored.map(v => v.toFixed(3))} plain ${plain.map(v => v.toFixed(3))}`);
+  await page.reload();
+  check(await page.evaluate(() => [zoom, cropX < .5, $('zv').textContent]).then(r => r[0] === 4 && r[1] && r[2] === '4×'), 'zoom and area are remembered');
+  await page.click('#zoomReset').catch(() => {}); // hidden until the camera runs: reset through the page instead
+  await page.evaluate(() => { zoom = 1; cropX = cropY = .5; saveCrop(); });
+  await page.close();
+}
+
+// 21. share the current model as a QR code that decodes to the app link
+{
+  const page = await open(MODELS.image);
+  check(await page.isHidden('#share'), 'share button appears only once a model is loaded');
+  await load(page);
+  await page.click('#share');
+  const src = await page.getAttribute('#qrImg', 'src');
+  const link = await page.textContent('#shareLink');
+  const decoded = await page.evaluate(async src => {
+    const img = new Image(); img.src = src; await img.decode();
+    const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+    const x = c.getContext('2d'); x.drawImage(img, 0, 0);
+    return jsQR(x.getImageData(0, 0, c.width, c.height).data, c.width, c.height)?.data;
+  }, src);
+  check(src.startsWith('data:image') && link.endsWith('?model=_hpiK-Ruz') && decoded === link, 'share shows a QR code of the app link with the model ID', `${link} / ${decoded}`);
+  await page.click('#share');
+  check(await page.isHidden('#shareBox'), 'share box closes');
+  await page.close();
+}
+
+// 22. scan a QR code with the camera: bare ID, model link, app share link; other QR codes are refused
+{
+  const gen = (page, text) => page.evaluate(t => { const q = qrcode(0, 'M'); q.addData(t); q.make(); return q.createDataURL(8, 4); }, text);
+  const tm = 'https://teachablemachine.withgoogle.com/models/_hpiK-Ruz/';
+  for (const [name, text, loads] of [['bare ID', '_hpiK-Ruz', true], ['model link', tm, true], ['app share link', 'https://ikaros-ch.github.io/tm-to-microbit/?model=_hpiK-Ruz', true], ['other website', 'https://example.org/', false]]) {
+    const page = await open();
+    await page.evaluate(src => (window.__qrSrc = src), await gen(page, text));
+    const before = await page.inputValue('#url');
+    await page.click('#scan');
+    if (loads) {
+      await page.waitForFunction(() => /image model/.test(document.getElementById('status').textContent), null, { timeout: 30000 });
+      check(await page.inputValue('#url') === tm && !(await page.evaluate(() => scanning)), `scan QR: ${name} loads the model`, await page.inputValue('#url'));
+    } else {
+      await page.waitForFunction(() => /not a Teachable Machine/.test(document.getElementById('status').textContent), null, { timeout: 15000 });
+      check(await page.evaluate(() => scanning) && await page.inputValue('#url') === before, `scan QR: ${name} is refused and scanning goes on`);
+      await page.click('#scan');
+      check(!(await page.evaluate(() => scanning)), 'scanning can be stopped');
+    }
+    check(!page.errors.length, `scan QR: ${name}: no console errors`, page.errors.slice(0, 2).join(' | '));
+    await page.close();
+  }
+}
+
+// 23. Greek: the new texts are translated
+{
+  const page = await open();
+  await page.click('#lang');
+  const el = await page.evaluate(() => [$('scan').textContent, $('share').textContent, $('zoom').closest('label').textContent.trim()]);
+  check(el[0] === 'Σάρωση QR' && el[1] === 'Κοινοποίηση ως QR' && /^Ζουμ/.test(el[2]), 'Greek: scan, share and zoom', el.join(' | '));
+  await page.close();
 }
 
 await browser.close();

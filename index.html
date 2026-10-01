@@ -21,15 +21,19 @@
   [hidden] { display: none !important; }
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .row > * { flex: 1 1 auto; }
-  input[type=url], select, input.cid { min-width: 0; flex: 1 1 220px; font: inherit; padding: 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
+  #url, select, input.cid { min-width: 0; flex: 1 1 220px; font: inherit; padding: 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
   input[type=range] { width: 100%; accent-color: var(--accent); }
   button { font: inherit; font-weight: 600; min-height: 48px; padding: 0 18px; border: 0; border-radius: 10px; background: var(--accent); color: var(--on-accent); cursor: pointer; }
   button.ghost { background: transparent; color: var(--accent); border: 1px solid var(--line); }
+  button.ghost.active { background: var(--accent); color: var(--on-accent); }
   #lang { min-height: 40px; padding: 0 12px; flex: none; }
   button:disabled { opacity: .45; cursor: default; }
   label { display: flex; gap: 8px; align-items: center; }
   label.stack { display: grid; gap: 4px; }
-  canvas { width: 100%; max-width: 360px; aspect-ratio: 1; border-radius: 10px; background: #000; justify-self: center; }
+  canvas { width: 100%; max-width: 360px; aspect-ratio: 1; border-radius: 10px; background: #000; justify-self: center; touch-action: none; cursor: grab; }
+  #shareBox { display: grid; gap: 6px; justify-items: center; text-align: center; }
+  #qrImg { width: min(100%, 280px); image-rendering: pixelated; border-radius: 8px; background: #fff; }
+  #shareLink { overflow-wrap: anywhere; user-select: all; }
   .cls { display: flex; gap: 6px; align-items: center; min-width: 0; }
   #bars { display: grid; gap: 6px; min-width: 0; }
   input.cid.dup { border-color: var(--warn); color: var(--warn); }
@@ -57,6 +61,11 @@
     #cam { grid-area: cam; position: sticky; top: 8px; }
     canvas { width: auto; height: min(360px, calc(100vh - 170px)); max-width: 100%; }
   }
+  /* Short landscape screens (phones): the zoom controls would not fit under a pinned camera, so let it scroll. */
+  @media (orientation: landscape) and (min-width: 700px) and (max-height: 500px) {
+    #cam { position: static; }
+    canvas { height: calc(100vh - 130px); }
+  }
 </style>
 </head>
 <body>
@@ -67,10 +76,19 @@
   </header>
 
   <section id="model">
-    <label class="stack" for="url" data-t="modelLink">Teachable Machine model link</label>
+    <label class="stack" for="url" data-t="modelLink">Teachable Machine model link or ID</label>
     <div class="row">
-      <input id="url" type="url" inputmode="url" autocomplete="off" placeholder="https://teachablemachine.withgoogle.com/models/…/">
+      <input id="url" type="text" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://teachablemachine.withgoogle.com/models/66wwsgmTN/  or  66wwsgmTN">
       <button id="load" data-t="load">Load</button>
+    </div>
+    <div class="row">
+      <button id="scan" class="ghost" aria-pressed="false" data-t="scan">Scan QR code</button>
+      <button id="share" class="ghost" aria-pressed="false" data-t="share" hidden>Share as QR</button>
+    </div>
+    <div id="shareBox" hidden>
+      <img id="qrImg" alt="QR code of this model">
+      <small id="shareLink"></small>
+      <small data-t="shareHint">Scan it with the camera of another phone, or with “Scan QR code” in this app, to open the same model.</small>
     </div>
     <small id="status" data-t="supported">Image, pose and audio models are supported.</small>
   </section>
@@ -81,6 +99,15 @@
     <div class="row">
       <select id="camSel" aria-label="Camera" hidden></select>
       <label><input type="checkbox" id="mirror" checked> <span data-t="mirror">Mirror (like TM training)</span></label>
+    </div>
+    <div id="zoomBox" hidden>
+      <div class="row">
+        <label class="stack" style="flex:1 1 200px"><span><span data-t="zoom">Zoom</span> <output id="zv">1×</output></span>
+          <input type="range" id="zoom" min="1" max="4" step="0.1" value="1">
+        </label>
+        <button id="zoomReset" class="ghost" data-t="reset">Reset</button>
+      </div>
+      <small data-t="zoomHint">The model only sees this picture. Zoom in and drag the picture to choose the area it uses.</small>
     </div>
   </section>
 
@@ -117,7 +144,7 @@
         <br>Use the <b>Teachable Machine</b> blocks and download. Or flash a ready-made test (shows icons for “Class 1/2” and ID 3):
         <a href="microbit-test-bluetooth.hex" download>Bluetooth</a> · <a href="microbit-test-usb.hex" download>USB</a>.</li>
       <li data-t="step2">For Bluetooth: in MakeCode open ⚙ → <b>Project Settings</b> and select <b>No Pairing Required</b>. Don’t use music blocks with Bluetooth (error 070); use the USB extension instead.</li>
-      <li data-t="step3">In Teachable Machine: <b>Export model → Upload</b>, copy the shareable link, paste it above, press <b>Load</b>.</li>
+      <li data-t="step3">In Teachable Machine: <b>Export model → Upload</b>, copy the shareable link, paste it above (or only the ID at the end of the link, or scan its QR code), press <b>Load</b>.</li>
       <li data-t="step4">Press <b>Bluetooth</b>, or plug the micro:bit in (on a phone, with an OTG / USB-C cable) and press <b>USB</b>.</li>
     </ol>
   </section>
@@ -127,6 +154,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8.5/dist/teachablemachine-image.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/pose@0.8.6/dist/teachablemachine-pose.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/speech-commands@0.4.0/dist/speech-commands.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 const UART = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
@@ -142,7 +171,15 @@ const CONF_STEP = 5, CONF_EVERY_MS = 250; // resend the same class when its conf
 // ---------- Greek translation ----------
 // Static text: elements with data-t (English is read from the page). Dynamic text: t('English {0}', x).
 const EL = {
-  modelLink: 'Σύνδεσμος μοντέλου Teachable Machine',
+  modelLink: 'Σύνδεσμος ή ID μοντέλου Teachable Machine',
+  scan: 'Σάρωση QR',
+  share: 'Κοινοποίηση ως QR',
+  shareHint: 'Σαρώστε το με την κάμερα άλλου κινητού, ή με το «Σάρωση QR» σε αυτή την εφαρμογή, για να ανοίξει το ίδιο μοντέλο.',
+  zoom: 'Ζουμ',
+  reset: 'Επαναφορά',
+  zoomHint: 'Το μοντέλο βλέπει μόνο αυτή την εικόνα. Κάντε ζουμ και σύρετε την εικόνα για να διαλέξετε την περιοχή που χρησιμοποιεί.',
+  'Point the camera at the QR code of a model (link or ID)…': 'Στρέψτε την κάμερα σε QR code μοντέλου (σύνδεσμος ή ID)…',
+  'That QR code is not a Teachable Machine model.': 'Αυτό το QR code δεν είναι μοντέλο Teachable Machine.',
   load: 'Φόρτωση',
   supported: 'Υποστηρίζονται μοντέλα εικόνας, στάσης σώματος και ήχου.',
   startCam: 'Έναρξη κάμερας',
@@ -159,7 +196,7 @@ const EL = {
     + '<br>Χρησιμοποιήστε τα μπλοκ <b>Teachable Machine</b> και κάντε λήψη. Ή φορτώστε ένα έτοιμο πρόγραμμα δοκιμής (εικονίδια για «Class 1/2» και ID 3): '
     + '<a href="microbit-test-bluetooth.hex" download>Bluetooth</a> · <a href="microbit-test-usb.hex" download>USB</a>.',
   step2: 'Για Bluetooth: στο MakeCode ανοίξτε ⚙ → <b>Ρυθμίσεις έργου</b> και επιλέξτε <b>No Pairing Required</b>. Μη χρησιμοποιείτε μπλοκ μουσικής με Bluetooth (σφάλμα 070)· χρησιμοποιήστε την επέκταση USB.',
-  step3: 'Στο Teachable Machine: <b>Export model → Upload</b>, αντιγράψτε τον σύνδεσμο, επικολλήστε τον παραπάνω και πατήστε <b>Φόρτωση</b>.',
+  step3: 'Στο Teachable Machine: <b>Export model → Upload</b>, αντιγράψτε τον σύνδεσμο, επικολλήστε τον παραπάνω (ή μόνο το ID στο τέλος του συνδέσμου, ή σαρώστε το QR code του) και πατήστε <b>Φόρτωση</b>.',
   step4: 'Πατήστε <b>Bluetooth</b> ή συνδέστε το micro:bit (σε κινητό με καλώδιο OTG / USB-C) και πατήστε <b>USB</b>.',
   'Paste your Teachable Machine model link first (Export model → Upload → copy link).': 'Επικολλήστε πρώτα τον σύνδεσμο του μοντέλου (Export model → Upload → αντιγραφή συνδέσμου).',
   'Loading model…': 'Φόρτωση μοντέλου…',
@@ -225,16 +262,84 @@ const threshold = () => +$('th').value;
 const load = key => { try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } };
 const save = (key, v) => { try { localStorage.setItem(key, JSON.stringify(v)); } catch {} };
 
+// ---------- model link, QR scan and share ----------
+
+// What the user typed or scanned: a model link, a bare model ID ("66wwsgmTN") or this app's share link (?model=…).
+// Returns the model's folder link, or '' (strict: only for things that look like a Teachable Machine model).
+function modelLink(text, strict = false) {
+  text = text.trim();
+  let shared = false;
+  try { const m = new URL(text).searchParams.get('model'); if (m) { text = m.trim(); shared = true; } } catch {}
+  text = text.replace(/(model|metadata)\.json.*$/, '').replace(/\/+$/, '');
+  if (/^[\w-]{5,20}$/.test(text)) return `https://teachablemachine.withgoogle.com/models/${text}/`;
+  if (!text || (strict && !shared && !/teachablemachine\.withgoogle\.com\/models\/[\w-]+/.test(text))) return '';
+  return (/^https?:\/\//.test(text) ? text : 'https://' + text) + '/';
+}
+
+let scanning = false, lastScan = 0, lastBadQr = '';
+const scanCanvas = document.createElement('canvas');
+
+// Looks for a QR code in the whole camera picture (not only the zoomed area), a few times a second.
+function scanFrame(now) {
+  if (now - lastScan < 250 || !video.videoWidth) return;
+  lastScan = now;
+  const k = Math.min(1, 640 / video.videoWidth);
+  const w = scanCanvas.width = Math.round(video.videoWidth * k), h = scanCanvas.height = Math.round(video.videoHeight * k);
+  const c = scanCanvas.getContext('2d', { willReadFrequently: true });
+  c.drawImage(video, 0, 0, w, h);
+  const code = jsQR(c.getImageData(0, 0, w, h).data, w, h);
+  if (code) useQr(code.data);
+}
+
+function useQr(text) {
+  const link = modelLink(text, true);
+  if (!link) {
+    if (text !== lastBadQr) { lastBadQr = text; status(() => t('That QR code is not a Teachable Machine model.'), true); }
+    return;
+  }
+  setScanning(false);
+  $('url').value = link;
+  loadModel();
+}
+
+function setScanning(on) {
+  scanning = on;
+  $('scan').classList.toggle('active', on);
+  $('scan').setAttribute('aria-pressed', on);
+  if (!on && kind === 'audio') { stopCamera(); $('cam').hidden = true; } // the camera was only needed for scanning
+}
+
+// The QR code holds this app's link with the model ID, so any phone camera opens the same model here.
+function updateShare() {
+  const id = /teachablemachine\.withgoogle\.com\/models\/([\w-]+)\/$/.exec(modelUrl)?.[1];
+  const link = `${location.origin}${location.pathname}?model=${encodeURIComponent(id || modelUrl)}`;
+  const qr = qrcode(0, 'M');
+  qr.addData(link);
+  qr.make();
+  $('qrImg').src = qr.createDataURL(8, 4);
+  $('shareLink').textContent = link;
+}
+
+// ---------- zoom: which area of the camera picture the model sees ----------
+
+let zoom = 1, cropX = .5, cropY = .5; // crop centre as a fraction of the camera picture
+{ const c = load('tm-crop'); if (c && c.zoom >= 1 && c.zoom <= 4) ({ zoom, cropX, cropY } = { zoom: c.zoom, cropX: +c.cropX || .5, cropY: +c.cropY || .5 }); }
+const saveCrop = () => save('tm-crop', { zoom, cropX, cropY });
+
+// The square of the camera picture (vw × vh) the model sees: side s, top-left x,y.
+function cropRect(vw, vh, z = zoom) {
+  const s = Math.min(vw, vh) / z;
+  return { s, x: Math.min(vw - s, Math.max(0, cropX * vw - s / 2)), y: Math.min(vh - s, Math.max(0, cropY * vh - s / 2)) };
+}
+
 // ---------- Teachable Machine ----------
 
 // Several loads can overlap (Enter pressed again with a new link): the latest one wins.
 // Everything is kept local until this load is known to be the latest.
 let loadSeq = 0;
 async function loadModel() {
-  let url = $('url').value.trim().replace(/(model|metadata)\.json.*$/, '');
+  const url = modelLink($('url').value);
   if (!url) return status(() => t('Paste your Teachable Machine model link first (Export model → Upload → copy link).'));
-  if (!/^https?:\/\//.test(url)) url = 'https://' + url;
-  if (!url.endsWith('/')) url += '/';
   try { localStorage.setItem('tm-url', url); } catch {}
   const my = ++loadSeq;
   status(() => t('Loading model…'));
@@ -308,6 +413,8 @@ async function loadModel() {
       if (!stream) await startCamera();
     }
     if (my !== loadSeq) return;
+    $('share').hidden = false;
+    if (!$('shareBox').hidden) updateShare();
     // The Bluetooth receive buffer holds 60 bytes: "9999,100," + name + "\n" leaves 50 for the name.
     const tooLong = names.filter(l => new TextEncoder().encode(l).length > 50);
     status(() => t('{0} model · {1} classes', t(k), names.length)
@@ -344,6 +451,7 @@ async function startCamera() {
   await video.play();
   $('camStart').hidden = true;
   $('canvas').hidden = false;
+  $('zoomBox').hidden = false;
   const active = stream.getVideoTracks()[0].getSettings().deviceId;
   const cams = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput');
   $('camSel').replaceChildren(...cams.map((c, i) => new Option(c.label || t('Camera {0}', i + 1), c.deviceId, false, c.deviceId === active)));
@@ -365,6 +473,7 @@ function stopCamera() {
   stream = null;
   $('camStart').hidden = false;
   $('canvas').hidden = true;
+  $('zoomBox').hidden = true;
 }
 
 // Draws every camera frame; classifies it when an image or pose model is loaded.
@@ -372,13 +481,15 @@ async function loop() {
   if (!stream) { looping = false; return; }
   const m = model;
   try {
-    const s = Math.min(video.videoWidth, video.videoHeight);
-    if (s) {
+    if (video.videoWidth) {
+      // While scanning a QR code the whole picture is shown; otherwise only the chosen (zoomed) area.
+      const r = cropRect(video.videoWidth, video.videoHeight, scanning ? 1 : zoom);
       ctx.save();
       if ($('mirror').checked) { ctx.translate(SIZE, 0); ctx.scale(-1, 1); }
-      ctx.drawImage(video, (video.videoWidth - s) / 2, (video.videoHeight - s) / 2, s, s, 0, 0, SIZE, SIZE);
+      ctx.drawImage(video, r.x, r.y, r.s, r.s, 0, 0, SIZE, SIZE);
       ctx.restore();
-      if (m) {
+      if (scanning) scanFrame(performance.now());
+      else if (m) {
         let preds;
         if (kind === 'pose') {
           const { pose, posenetOutput } = await m.estimatePose($('canvas'));
@@ -586,6 +697,41 @@ $('camSel').onchange = () => {
   try { localStorage.setItem('tm-cam', $('camSel').value); } catch {}
   startCamera().catch(camError);
 };
+$('scan').onclick = async () => {
+  if (scanning) return setScanning(false);
+  try {
+    $('cam').hidden = false;
+    if (!stream) await startCamera();
+  } catch (e) { return camError(e); }
+  lastBadQr = '';
+  setScanning(true);
+  status(() => t('Point the camera at the QR code of a model (link or ID)…'));
+};
+$('share').onclick = () => {
+  const open = $('shareBox').hidden;
+  $('shareBox').hidden = !open;
+  $('share').classList.toggle('active', open);
+  $('share').setAttribute('aria-pressed', open);
+  if (open) updateShare();
+};
+// Zoom slider, reset, and dragging the picture to move the chosen area.
+const showZoom = () => { $('zv').textContent = zoom.toFixed(1).replace('.0', '') + '×'; $('zoom').value = zoom; };
+$('zoom').oninput = () => { zoom = +$('zoom').value; showZoom(); saveCrop(); };
+$('zoomReset').onclick = () => { zoom = 1; cropX = cropY = .5; showZoom(); saveCrop(); };
+let drag = null;
+$('canvas').onpointerdown = e => { drag = { x: e.clientX, y: e.clientY }; $('canvas').setPointerCapture(e.pointerId); $('canvas').style.cursor = 'grabbing'; };
+$('canvas').onpointermove = e => {
+  if (!drag || scanning || !video.videoWidth) return;
+  const k = cropRect(video.videoWidth, video.videoHeight).s / $('canvas').clientWidth; // camera pixels per screen pixel
+  // The picture follows the finger: the chosen area moves the other way (the same way when mirrored).
+  cropX += ($('mirror').checked ? 1 : -1) * (e.clientX - drag.x) * k / video.videoWidth;
+  cropY -= (e.clientY - drag.y) * k / video.videoHeight;
+  cropX = Math.min(1, Math.max(0, cropX)); cropY = Math.min(1, Math.max(0, cropY));
+  drag = { x: e.clientX, y: e.clientY };
+  saveCrop();
+};
+$('canvas').onpointerup = $('canvas').onpointercancel = () => { drag = null; $('canvas').style.cursor = ''; };
+showZoom();
 $('ble').onclick = () => connect(connectBle);
 $('usb').onclick = () => connect(connectUsb);
 $('disconnect').onclick = async () => { const l = link; dropped('by user'); try { await l.close(); } catch {} };

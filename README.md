@@ -24,7 +24,19 @@ Ready-made test programs: [microbit-test-bluetooth.hex](microbit-test-bluetooth.
 2. **Teachable Machine:** *Export model → Upload (shareable link)*, copy the link.
 3. **Web app:** paste the link, press **Load**, then **Bluetooth**, or plug in the micro:bit and press **USB**.
 
-Tip: `…/tm-to-microbit/?model=<TM link>` pre-fills the model, which is handy for a QR code.
+### Loading a model
+
+The box next to **Load** accepts any of these:
+* the shareable link (`https://teachablemachine.withgoogle.com/models/66wwsgmTN/`),
+* just the ID at the end of the link (`66wwsgmTN`),
+* this app's share link (`…/tm-to-microbit/?model=66wwsgmTN`).
+
+**Scan QR code** uses the camera to read a QR code holding any of the above and loads that model. QR codes of other things are ignored.
+**Share as QR** (after a model is loaded) shows a QR code of this app's link with the model ID: scan it with another phone's camera to open the same model, press **Load**, done. It also works with **Scan QR code** on a second device that already has the app open.
+
+### Zoom: which part of the picture the model uses
+
+Below the camera picture, **Zoom** (1–4×) crops the picture and you can **drag** it to move the chosen area; the model only sees what the preview shows, which helps when the thing you want to recognise is small or far away. **Reset** shows the whole picture again. The zoom is remembered on the device.
 
 ## Blocks
 
