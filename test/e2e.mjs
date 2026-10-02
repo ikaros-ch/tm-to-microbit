@@ -561,6 +561,7 @@ for (const [name, url] of Object.entries(MODELS)) {
   await page.click('#lang');
   const el = await page.evaluate(() => [$('scan').textContent, $('share').textContent, $('zoom').closest('label').textContent.trim()]);
   check(el[0] === 'Σάρωση QR' && el[1] === 'Κοινοποίηση ως QR' && /^Ζουμ/.test(el[2]), 'Greek: scan, share and zoom', el.join(' | '));
+  await page.click('#lang'); // back to English: the choice is remembered by the browser
   await page.close();
 }
 
@@ -599,6 +600,34 @@ for (const [name, url] of Object.entries(MODELS)) {
     check(!page.errors.length, `web buttons (${mode}): no console errors`, page.errors.slice(0, 2).join(' | '));
     await page.close();
   }
+}
+
+// 25. scanning never blocks zoom or the percentages: obvious while on, ends on Load and by itself
+{
+  const page = await open(MODELS.image);
+  await load(page);
+  await page.evaluate(() => { const o = ctx.drawImage.bind(ctx); ctx.drawImage = (...a) => { window.__src = a.slice(1, 5); return o(...a); }; });
+  const pct = () => page.$$eval('#bars em', e => e.map(x => x.textContent).join(' '));
+  await page.click('#scan');
+  await page.waitForTimeout(500);
+  check(await page.textContent('#scan') === 'Stop scanning' && await page.$eval('#canvas', c => c.classList.contains('scanning')), 'scanning is obvious: button says Stop scanning, picture outlined');
+  await page.click('#lang');
+  check(await page.textContent('#scan') === 'Σταμάτημα σάρωσης', 'Greek: Stop scanning');
+  await page.click('#lang');
+  await page.click('#load');
+  await page.waitForFunction(() => /model ·/.test(document.getElementById('status').textContent), null, { timeout: 60000 });
+  check(!(await page.evaluate(() => scanning)) && await page.textContent('#scan') === 'Scan QR code', 'loading a model ends scanning');
+  await page.$eval('#zoom', el => { el.value = 3; el.dispatchEvent(new Event('input')); });
+  await page.waitForTimeout(400);
+  const src = await page.evaluate(() => window.__src[2]);
+  await page.evaluate(() => { zoom = 1; });
+  const a = await pct(); await page.waitForTimeout(2000);
+  check(src === 160 && a !== await pct(), 'zoom works and percentages move after scanning', `source square ${src}`);
+  await page.evaluate(() => { scanMs = 600; });
+  await page.click('#scan');
+  await page.waitForTimeout(1500);
+  check(!(await page.evaluate(() => scanning)) && await page.textContent('#scan') === 'Scan QR code', 'scanning stops by itself after a while');
+  await page.close();
 }
 
 await browser.close();

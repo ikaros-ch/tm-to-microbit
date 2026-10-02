@@ -82,6 +82,7 @@
     background: var(--yel); border: 3px solid var(--ink); box-shadow: 0 3px 0 var(--ink); }
   input[type=range]::-moz-range-thumb { width: 26px; height: 26px; border-radius: 50%; background: var(--yel); border: 3px solid var(--ink); box-shadow: 0 3px 0 var(--ink); }
 
+  canvas.scanning { outline: 5px dashed var(--pink); outline-offset: 4px; }
   canvas { width: 100%; max-width: 360px; aspect-ratio: 1; border-radius: 20px; border: 3px solid var(--edge); background: #000; justify-self: center; touch-action: none; cursor: grab; }
   #shareBox { display: grid; gap: 8px; justify-items: center; text-align: center; }
   #qrImg { width: min(100%, 280px); image-rendering: pixelated; border-radius: 14px; background: #fff; padding: 8px; border: 3px solid var(--edge); }
@@ -250,6 +251,7 @@ const CONF_STEP = 5, CONF_EVERY_MS = 250; // resend the same class when its conf
 const EL = {
   modelLink: 'Σύνδεσμος ή ID μοντέλου Teachable Machine',
   scan: 'Σάρωση QR',
+  stopScan: 'Σταμάτημα σάρωσης',
   share: 'Κοινοποίηση ως QR',
   shareHint: 'Σαρώστε το με την κάμερα άλλου κινητού, ή με το «Σάρωση QR» σε αυτή την εφαρμογή, για να ανοίξει το ίδιο μοντέλο.',
   zoom: 'Ζουμ',
@@ -381,10 +383,21 @@ function useQr(text) {
   loadModel();
 }
 
+// While scanning, the whole picture is shown and nothing is recognised, so make it obvious and never leave it on:
+// it ends by itself after scanMs, and when a model is loaded.
+let scanMs = 45000, scanTimer = 0, statusBeforeScan = null;
 function setScanning(on) {
+  if (on === scanning) return;
   scanning = on;
+  clearTimeout(scanTimer);
+  if (on) { statusBeforeScan = statusMsg; scanTimer = setTimeout(() => setScanning(false), scanMs); }
+  else if (statusBeforeScan) { status(statusBeforeScan); statusBeforeScan = null; }
   $('scan').classList.toggle('active', on);
   $('scan').setAttribute('aria-pressed', on);
+  $('canvas').classList.toggle('scanning', on);
+  $('scan').dataset.t = on ? 'stopScan' : 'scan';
+  $('scan').dataset.en = on ? 'Stop scanning' : 'Scan QR code';
+  applyLang();
   if (!on && kind === 'audio') { stopCamera(); $('cam').hidden = true; } // the camera was only needed for scanning
 }
 
@@ -417,6 +430,7 @@ function cropRect(vw, vh, z = zoom) {
 // Everything is kept local until this load is known to be the latest.
 let loadSeq = 0;
 async function loadModel() {
+  setScanning(false);
   const url = modelLink($('url').value);
   if (!url) return status(() => t('Paste your Teachable Machine model link first (Export model → Upload → copy link).'));
   try { localStorage.setItem('tm-url', url); } catch {}
