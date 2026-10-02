@@ -38,6 +38,10 @@ The box next to **Load** accepts any of these:
 
 Below the camera picture, **Zoom** (1–4×) crops the picture and you can **drag** it to move the chosen area; the model only sees what the preview shows, which helps when the thing you want to recognise is small or far away. **Reset** shows the whole picture again. The zoom is remembered on the device.
 
+### Starter program and code editor
+
+The bottom of the page has a link to a starter program in MakeCode (it already uses the Bluetooth extension: https://makecode.microbit.org/S94523-20313-05753-47144) and an **Edit the code here** button that opens the MakeCode editor inside the page. It is only loaded when you press the button, because the editor is a big download and takes the keyboard focus. Use the Download button inside it, or open the starter in MakeCode, to put the program on your micro:bit.
+
 ## Blocks
 
 ```blocks

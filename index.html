@@ -38,6 +38,8 @@
   label[for=url]::before { content: "🧠 "; }
   section { background: var(--card); border: 3px solid var(--edge); border-radius: 24px; padding: 18px; display: grid; gap: 12px; min-width: 0;
     box-shadow: 6px 6px 0 var(--c, var(--blu)); }
+  #code { --c: var(--sky); }
+  #code h2::before { content: "🧩 "; }
   #model { --c: var(--yel); } #cam { --c: var(--blu); } #preds { --c: var(--pink); } #mb { --c: var(--mint); } #help { --c: var(--vio); }
   [hidden] { display: none !important; }
   .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
@@ -65,6 +67,15 @@
   #disconnect, #zoomReset, #camStart { background: var(--card); color: var(--fg); }
   #camStart { background: var(--sky); color: var(--ink); }
   #lang { min-height: 44px; padding: 0 14px; flex: none; border-radius: 14px; background: var(--yel); color: var(--ink); }
+  a.btnlink { display: flex; align-items: center; justify-content: center; text-align: center; min-height: 54px; padding: 8px 22px; border: 3px solid var(--ink); border-radius: 18px;
+    background: var(--sky); color: var(--ink); font: 700 1.05rem Comfortaa, ui-rounded, system-ui, sans-serif; text-decoration: none; box-shadow: 0 5px 0 var(--ink); }
+  a.btnlink:active { transform: translateY(4px); box-shadow: 0 1px 0 var(--ink); }
+  a.btnlink:focus-visible { outline: none; box-shadow: 0 0 0 5px var(--focus), 0 5px 0 var(--ink); }
+  .embed { position: relative; height: clamp(440px, 80vh, 720px); border: 3px solid var(--edge); border-radius: 18px; overflow: hidden; background: var(--field); }
+  .embed button { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); }
+  .embed button:active:not(:disabled) { transform: translate(-50%, calc(-50% + 4px)); }
+  #codeLoading { position: absolute; inset: 50% 16px auto; transform: translateY(-50%); margin: 0; text-align: center; font-weight: 700; color: var(--muted); }
+  .embed iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
   button.wb { min-height: 78px; font-size: 1.25rem; border-radius: 24px; touch-action: manipulation; user-select: none; -webkit-user-select: none; color: var(--ink); }
   #wb1 { background: var(--pink); } #wb2 { background: var(--sky); }
   button.wb.down { transform: translateY(5px); box-shadow: 0 0 0 var(--ink), 0 0 0 6px var(--yel); filter: brightness(1.1) saturate(1.2); }
@@ -127,10 +138,10 @@
   /* Landscape phone / wide screen: camera on the left stays in view, classes and controls on the right. */
   @media (orientation: landscape) and (min-width: 700px) {
     main { max-width: 1100px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start;
-      grid-template-areas: "head head" "cam preds" "cam model" "cam mb" "help help"; }
-    main:has(#preds:not([hidden])) { grid-template-areas: "head head" "cam preds" "cam mb" "cam model" "help help"; }
-    main:has(#cam[hidden]) { grid-template-areas: "head head" "preds preds" "mb mb" "model model" "help help"; }
-    header { grid-area: head; } #model { grid-area: model; } #preds { grid-area: preds; } #mb { grid-area: mb; } #help { grid-area: help; }
+      grid-template-areas: "head head" "cam preds" "cam model" "cam mb" "help help" "code code"; }
+    main:has(#preds:not([hidden])) { grid-template-areas: "head head" "cam preds" "cam mb" "cam model" "help help" "code code"; }
+    main:has(#cam[hidden]) { grid-template-areas: "head head" "preds preds" "mb mb" "model model" "help help" "code code"; }
+    header { grid-area: head; } #model { grid-area: model; } #preds { grid-area: preds; } #mb { grid-area: mb; } #help { grid-area: help; } #code { grid-area: code; }
     #cam { grid-area: cam; position: sticky; top: 8px; }
     canvas { width: auto; height: min(360px, calc(100vh - 170px)); max-width: 100%; }
   }
@@ -226,6 +237,18 @@
       <li data-t="step4">Press <b>Bluetooth</b>, or plug the micro:bit in (on a phone, with an OTG / USB-C cable) and press <b>USB</b>.</li>
     </ol>
   </section>
+
+  <section id="code">
+    <h2 data-t="codeTitle">Code your micro:bit</h2>
+    <a id="starterLink" class="btnlink" href="https://makecode.microbit.org/S94523-20313-05753-47144" target="_blank" rel="noopener" data-t="starter">Open the starter program in MakeCode</a>
+    <small data-t="codeHint">The starter already has the Teachable Machine blocks. Change the code here, or open it in MakeCode to download it to your micro:bit.</small>
+    <div class="embed">
+      <button id="codeOpen" data-t="codeOpen">Edit the code here</button>
+      <p id="codeLoading" data-t="codeLoading" hidden>Loading the editor… this can take a few seconds.</p>
+      <!-- Loaded only after the button is pressed: a MakeCode frame that loads with the page takes the keyboard focus and is a big download on a phone. -->
+      <iframe title="MakeCode" data-src="https://makecode.microbit.org/#pub:S94523-20313-05753-47144" frameborder="0" sandbox="allow-popups allow-forms allow-scripts allow-same-origin" hidden></iframe>
+    </div>
+  </section>
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.3.1/dist/tf.min.js"></script>
@@ -278,6 +301,11 @@ const EL = {
   step3: 'Στο Teachable Machine: <b>Export model → Upload</b>, αντιγράψτε τον σύνδεσμο, επικολλήστε τον παραπάνω (ή μόνο το ID στο τέλος του συνδέσμου, ή σαρώστε το QR code του) και πατήστε <b>Φόρτωση</b>.',
   webButton: 'Κουμπί',
   webButtonHint: 'Όπως τα κουμπιά A και B: κρατήστε πατημένο για να μείνουν πατημένα. Χρησιμοποιήστε τα μπλοκ «κουμπί web» στο micro:bit.',
+  codeTitle: 'Φτιάξε κώδικα για το micro:bit',
+  starter: 'Άνοιγμα του έτοιμου προγράμματος στο MakeCode',
+  codeOpen: 'Άλλαξε τον κώδικα εδώ',
+  codeLoading: 'Φόρτωση του editor… μπορεί να πάρει λίγα δευτερόλεπτα.',
+  codeHint: 'Το έτοιμο πρόγραμμα έχει ήδη τα μπλοκ Teachable Machine. Άλλαξε τον κώδικα εδώ ή άνοιξέ το στο MakeCode για να το κατεβάσεις στο micro:bit.',
   step4: 'Πατήστε <b>Bluetooth</b> ή συνδέστε το micro:bit (σε κινητό με καλώδιο OTG / USB-C) και πατήστε <b>USB</b>.',
   'Paste your Teachable Machine model link first (Export model → Upload → copy link).': 'Επικολλήστε πρώτα τον σύνδεσμο του μοντέλου (Export model → Upload → αντιγραφή συνδέσμου).',
   'Loading model…': 'Φόρτωση μοντέλου…',
@@ -850,6 +878,14 @@ $('canvas').onpointermove = e => {
 };
 $('canvas').onpointerup = $('canvas').onpointercancel = () => { drag = null; $('canvas').style.cursor = ''; };
 showZoom();
+$('codeOpen').onclick = () => {
+  const f = document.querySelector('#code iframe');
+  f.onload = () => { $('codeLoading').hidden = true; };
+  f.src = f.dataset.src;
+  f.hidden = false;
+  $('codeOpen').hidden = true;
+  $('codeLoading').hidden = false;
+};
 $('ble').onclick = () => connect(connectBle);
 $('usb').onclick = () => connect(connectUsb);
 $('disconnect').onclick = async () => { const l = link; dropped('by user'); try { await l.close(); } catch {} };

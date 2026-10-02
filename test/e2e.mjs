@@ -630,6 +630,28 @@ for (const [name, url] of Object.entries(MODELS)) {
   await page.close();
 }
 
+// 26. starter program: link and embedded editor at the bottom of the page
+{
+  const page = await open();
+  const ids = await page.$$eval('main > section', ss => ss.map(x => x.id));
+  const link = await page.getAttribute('#starterLink', 'href');
+  const fr = await page.$eval('#code iframe', f => ({ src: f.src, want: f.dataset.src, sandbox: f.getAttribute('sandbox'), lazy: f.hidden }));
+  check(ids.at(-1) === 'code' && link === 'https://makecode.microbit.org/S94523-20313-05753-47144'
+    && fr.want === 'https://makecode.microbit.org/#pub:S94523-20313-05753-47144' && fr.src === '' && fr.lazy && /allow-scripts/.test(fr.sandbox),
+    'starter program link and editor are the last section; the editor is not loaded with the page', JSON.stringify({ ids: ids.at(-1), link, fr }));
+  check(await page.getAttribute('#starterLink', 'target') === '_blank', 'starter link opens in a new tab');
+  const h = await page.$eval('#code .embed', e => e.getBoundingClientRect().height);
+  check(h >= 400 && !(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)), 'editor window is tall enough and the page does not scroll sideways', `${h}px`);
+  await page.route('https://makecode.microbit.org/**', r => r.fulfill({ contentType: 'text/html', body: '<title>fake MakeCode</title>' }));
+  await page.click('#codeOpen');
+  await page.waitForTimeout(500);
+  check(await page.$eval('#code iframe', f => !f.hidden && f.src === 'https://makecode.microbit.org/#pub:S94523-20313-05753-47144') && await page.isHidden('#codeOpen') && await page.isHidden('#codeLoading'), 'pressing Edit the code here loads the editor, then hides the loading note');
+  await page.click('#lang');
+  check(/MakeCode/.test(await page.textContent('#starterLink')) && /^Άνοιγμα/.test(await page.textContent('#starterLink')), 'Greek: starter link');
+  await page.click('#lang');
+  await page.close();
+}
+
 await browser.close();
 server?.close();
 console.log(failed ? `\n${failed} FAILED` : '\nALL PASSED');
