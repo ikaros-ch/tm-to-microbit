@@ -5,6 +5,7 @@ Receive [Teachable Machine](https://teachablemachine.withgoogle.com/) classes fr
 The extension asks for **No Pairing Required**, but MakeCode's ⚙ → **Project Settings** may still show *JustWorks*: select **No Pairing Required** there yourself, then download. Adding this extension removes **radio** blocks, because MakeCode can't use Bluetooth and radio together. If you need radio, use `https://github.com/ikaros-ch/tm-to-microbit/usb` instead.
 
 ```blocks
+// Tick when the web app connects
 bluetooth.onBluetoothConnected(function () {
     basic.showIcon(IconNames.Yes)
 })
@@ -26,3 +27,18 @@ Blocks are available in English and Greek; MakeCode uses the language chosen in 
 * ⚙ → **Project Settings**: select **No Pairing Required** (it isn't selected for you).
 * Don't use **music** blocks with Bluetooth: the micro:bit can stop with **error 070**. Use the USB extension for music.
 * Class names can be up to 50 bytes: about 50 Latin letters, or 25 Greek letters (Greek letters take 2 bytes each). Longer names don't fit the micro:bit's Bluetooth receive buffer; the web app warns about them. Over USB they arrive whole.
+
+## Learn more
+
+* [Teachable Machine](https://teachablemachine.withgoogle.com/) and its [FAQ](https://teachablemachine.withgoogle.com/faq)
+* [micro:bit Machine Learning projects (CreateAI)](https://microbit.org/ai/)
+* [Web app](https://ikaros-ch.github.io/tm-to-microbit/) and [starter MakeCode program](https://makecode.microbit.org/S94523-20313-05753-47144)
+* [Bluetooth pairing on the micro:bit](https://makecode.microbit.org/reference/bluetooth/bluetooth-pairing)
+
+## License
+
+MIT
+
+## Supported targets
+
+* for PXT/microbit

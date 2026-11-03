@@ -89,6 +89,7 @@ namespace teachable {
      */
     //% blockId=teachable_on_class block="on class $label detected" weight=100
     //% label.defl="Class 1"
+    //% help=github:teachable-machine-usb/docs/on-class
     export function onClass(label: string, handler: () => void) {
         if (!labels) labels = []
         if (labels.indexOf(label) < 0) labels.push(label)
@@ -101,6 +102,7 @@ namespace teachable {
      */
     //% blockId=teachable_on_class_id block="on class ID $id detected" weight=90
     //% id.min=0 id.max=9999
+    //% help=github:teachable-machine-usb/docs/on-class-id
     export function onClassId(id: number, handler: () => void) {
         control.onEvent(ID_EVENT_ID, id + 1, handler)
     }
@@ -109,6 +111,7 @@ namespace teachable {
      * The name of the last class received ("" before the first one).
      */
     //% blockId=teachable_current_class block="detected class" weight=80
+    //% help=github:teachable-machine-usb/docs/current-class
     export function currentClass(): string {
         return current
     }
@@ -117,6 +120,7 @@ namespace teachable {
      * The ID of the last class received (-1 before the first one).
      */
     //% blockId=teachable_class_id block="class ID" weight=70
+    //% help=github:teachable-machine-usb/docs/class-id
     export function classId(): number {
         return currentId
     }
@@ -125,6 +129,7 @@ namespace teachable {
      * How sure the model is about the detected class, 0 to 100.
      */
     //% blockId=teachable_confidence block="confidence" weight=60
+    //% help=github:teachable-machine-usb/docs/confidence
     export function confidence(): number {
         return conf
     }
@@ -133,6 +138,7 @@ namespace teachable {
      * The detected class (name or ID) and its confidence as text, eg "Class 1 87%" ("" before the first one).
      */
     //% blockId=teachable_class_and_confidence block="detected class $what and confidence" weight=50
+    //% help=github:teachable-machine-usb/docs/class-and-confidence
     export function classAndConfidence(what: ClassInfo): string {
         if (current == "" && currentId < 0) return ""
         return (what == ClassInfo.Id ? "" + currentId : current) + " " + conf + "%"
@@ -152,19 +158,21 @@ namespace teachable {
 
     /**
      * Runs when a button in the web app is pressed or released, like the A and B buttons on the micro:bit.
-     * @param button which web button, eg: WebButton.One
+     * @param button which web button, eg: teachable.WebButton.One
      * @param event pressed or released
      */
     //% blockId=teachable_on_web_button block="on web button $button $event" weight=40
+    //% help=github:teachable-machine-usb/docs/on-web-button
     export function onWebButton(button: WebButton, event: WebButtonEvent, handler: () => void) {
         control.onEvent(WEB_BUTTON_EVENT_ID, button * 10 + event, handler)
     }
 
     /**
      * True while the web app's button is held down.
-     * @param button which web button, eg: WebButton.One
+     * @param button which web button, eg: teachable.WebButton.One
      */
     //% blockId=teachable_web_button_pressed block="web button $button is pressed" weight=39
+    //% help=github:teachable-machine-usb/docs/web-button-pressed
     export function webButtonPressed(button: WebButton): boolean {
         return webDown[button]
     }
@@ -192,6 +200,7 @@ namespace teachable {
      */
     //% blockId=teachable_confidence_of_id block="confidence of class ID $id" weight=45
     //% id.min=0 id.max=9999 id.defl=2
+    //% help=github:teachable-machine-usb/docs/confidence-of-id
     export function confidenceOfId(id: number): number {
         return tableIds ? confidenceAt(tableIds.indexOf(id)) : 0
     }
@@ -202,6 +211,7 @@ namespace teachable {
      */
     //% blockId=teachable_confidence_of_class block="confidence of class $label" weight=44
     //% label.defl="Class 2"
+    //% help=github:teachable-machine-usb/docs/confidence-of-class
     export function confidenceOfClass(label: string): number {
         return tableNames ? confidenceAt(tableNames.indexOf(label)) : 0
     }
