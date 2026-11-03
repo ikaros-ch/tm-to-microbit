@@ -13,8 +13,8 @@ Add one of these inside a MakeCode project with **Extensions**, pasting the URL 
 
 | Extension | URL | Radio |
 |---|---|---|
-| [Bluetooth](bluetooth/): no pairing (see above), also works over USB | `https://github.com/ikaros-ch/tm-to-microbit/bluetooth` | removed (MakeCode can't use both) |
-| [USB](usb/) | `https://github.com/ikaros-ch/tm-to-microbit/usb` | kept |
+| [Bluetooth](https://github.com/ikaros-ch/tm-to-microbit-bluetooth): no pairing (see above), also works over USB | `https://github.com/ikaros-ch/tm-to-microbit-bluetooth` | removed (MakeCode can't use both) |
+| [USB](https://github.com/ikaros-ch/tm-to-microbit-usb) | `https://github.com/ikaros-ch/tm-to-microbit-usb` | kept |
 
 Ready-made test programs: [microbit-test-bluetooth.hex](microbit-test-bluetooth.hex) and [microbit-test-usb.hex](microbit-test-usb.hex). They show heart / happy / sad icons for `Class 1/2/3`, and button A scrolls the last class.
 
